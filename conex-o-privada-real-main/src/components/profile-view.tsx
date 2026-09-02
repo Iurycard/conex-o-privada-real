@@ -18,6 +18,8 @@ import {
   Signpost,
   UserRound,
   Ban,
+  ChevronLeft,
+  ChevronRight,
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -54,7 +56,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
   const { posts, isFollowing, toggleFollow } = useProfiles();
   const { isVip, openVipModal } = useVip();
   const [expanded, setExpanded] = useState(false);
-  const [lightbox, setLightbox] = useState<number | null>(null);
+  const [lightbox, setLightbox] = useState<{ photos: number[]; index: number } | null>(null);
 
   const vip = isOwner ? isVip : profile.vip;
   const following = isFollowing(profile.id);
@@ -280,7 +282,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                   {publicPhotos.map((h, i) => (
                     <button
                       key={i}
-                      onClick={() => setLightbox(h)}
+                      onClick={() => setLightbox({ photos: publicPhotos, index: i })}
                       aria-label={`Abrir foto ${i + 1}`}
                       className="overflow-hidden rounded-xl"
                     >
@@ -327,12 +329,43 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <DialogTitle className="text-sm">Foto de {profile.nick}</DialogTitle>
           </DialogHeader>
           {lightbox !== null && (
-            <MediaBlock
-              hue={lightbox}
-              src={profile.publicAlbum?.[publicPhotos.indexOf(lightbox)]}
-              alt={`Foto de ${profile.nick}`}
-              className="aspect-square w-full rounded-xl"
-            />
+            <div className="relative">
+              <MediaBlock
+                hue={lightbox.photos[lightbox.index] ?? 0}
+                src={profile.publicAlbum?.[lightbox.index]}
+                alt={`Foto ${lightbox.index + 1} de ${profile.nick}`}
+                className="aspect-square w-full rounded-xl"
+              />
+              <button
+                onClick={() =>
+                  setLightbox((current) =>
+                    current
+                      ? { ...current, index: (current.index - 1 + current.photos.length) % current.photos.length }
+                      : null,
+                  )
+                }
+                aria-label="Foto anterior"
+                className="absolute left-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground backdrop-blur transition-colors hover:bg-background"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() =>
+                  setLightbox((current) =>
+                    current
+                      ? { ...current, index: (current.index + 1) % current.photos.length }
+                      : null,
+                  )
+                }
+                aria-label="Próxima foto"
+                className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground backdrop-blur transition-colors hover:bg-background"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+              <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-background/75 px-2.5 py-1 text-[11px] text-foreground backdrop-blur">
+                {lightbox.index + 1} / {lightbox.photos.length}
+              </span>
+            </div>
           )}
           <button
             onClick={() => setLightbox(null)}

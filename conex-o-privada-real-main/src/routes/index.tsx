@@ -99,7 +99,7 @@ function Landing() {
             Conexão <span className="text-primary-glow">Privada</span>
           </span>
         </div>
-        <Link to="/feed" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <Link to="/feed" className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground shadow-neon transition-all hover:opacity-90 hover:shadow-lg sm:w-auto">
           Entrar
         </Link>
       </header>

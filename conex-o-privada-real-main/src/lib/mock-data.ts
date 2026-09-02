@@ -19,13 +19,31 @@ import postF2 from "@/assets/posts/post-f2.jpg";
 import postF3 from "@/assets/posts/post-f3.jpg";
 import postF4 from "@/assets/posts/post-f4.jpg";
 import postF5 from "@/assets/posts/post-f5.jpg";
+import album1 from "@/assets/albums/album1.png";
+import album2 from "@/assets/albums/album2.png";
+import album3 from "@/assets/albums/album3.png";
+import album4 from "@/assets/albums/album4.png";
+import album5 from "@/assets/albums/album5.png";
+import album6 from "@/assets/albums/album6.png";
+import album7 from "@/assets/albums/album7.png";
+import album8 from "@/assets/albums/album8.png";
+import album9 from "@/assets/albums/album9.png";
+import album10 from "@/assets/albums/album10.png";
+import album11 from "@/assets/albums/album11.png";
+import album12 from "@/assets/albums/album12.png";
+import album13 from "@/assets/albums/album13.png";
+import album14 from "@/assets/albums/album14.png";
+import album15 from "@/assets/albums/album15.png";
+import album16 from "@/assets/albums/album16.png";
+
 
 export type AccountType =
   | "Casal (Ele/Ela)"
   | "Casal (Ela/Ela)"
   | "Casal (Ele/Ele)"
   | "Mulher Solteira"
-  | "Homem Solteiro";
+  | "Homem Solteiro"
+  | "Travesti";
 
 export const accountTypes: AccountType[] = [
   "Casal (Ele/Ela)",
@@ -33,6 +51,7 @@ export const accountTypes: AccountType[] = [
   "Casal (Ele/Ele)",
   "Mulher Solteira",
   "Homem Solteiro",
+  "Travesti",
 ];
 
 export type Profile = {
@@ -69,24 +88,31 @@ export const unsplashPhotoPool = [
   U("photo-1521737604893-d14cc237f11d"),
   U("photo-1517048676732-d65bc937f952"),
 ];
+export const avatarPool = [avA1, avA2, avA3, avA4, avA5, avA6, avA7, avA8];
+export const coverPool = [coverC1, coverC2, coverC3, coverC4, coverC5, coverC6, coverC7, coverC8];
+export const albumPool = [album1, album2, album3, album4, album5, album6, album7, album8, album9, album10, album11, album12, album13, album14, album15, album16];
+
 
 function albumFrom(offset: number, count: number) {
   return Array.from(
     { length: count },
-    (_, i) => unsplashPhotoPool[(offset + i) % unsplashPhotoPool.length]!,
+    (_, i) => albumPool[(offset + i) % albumPool.length]!,
   );
 }
 
-export function randomPublicAlbum() {
-  return albumFrom(Math.floor(Math.random() * unsplashPhotoPool.length), 6);
-}
 
 export function randomPrivateAlbum() {
-  return albumFrom(Math.floor(Math.random() * unsplashPhotoPool.length), 4);
+  return albumFrom(Math.floor(Math.random() * albumPool.length), 4);
 }
 
-export const avatarPool = [avA1, avA2, avA3, avA4, avA5, avA6, avA7, avA8];
-export const coverPool = [coverC1, coverC2, coverC3, coverC4, coverC5, coverC6, coverC7, coverC8];
+export function randomPublicAlbum() {
+ return [
+    albumPool[Math.floor(Math.random() * albumPool.length)],
+    albumPool[Math.floor(Math.random() * albumPool.length)],
+    albumPool[Math.floor(Math.random() * albumPool.length)],
+ ]
+}
+
 
 export function randomAvatar() {
   return avatarPool[Math.floor(Math.random() * avatarPool.length)]!;
