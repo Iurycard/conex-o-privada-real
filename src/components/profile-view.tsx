@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Cake,
@@ -148,7 +148,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2"
         >
           {isVip || isOwner ? <MessageSquare className="h-5 w-5" /> : <Lock className="h-5 w-5 text-gold" />}
-        </button>
+        </Link>
 
         <DropdownMenu>
           <DropdownMenuTrigger aria-label="Mais opções" className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2">

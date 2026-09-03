@@ -37,11 +37,7 @@ export const Route = createFileRoute("/feed")({
 function PostCard({ postId }: { postId: string }) {
   const post = posts.find((p) => p.id === postId)!;
   const author = profileById(post.authorId);
-<<<<<<< HEAD:conex-o-privada-real-main/src/routes/feed.tsx
   const { isVip, openVipModal, tryUseLike } = useVip();
-=======
-  const { isVip, openVipModal, registerLike } = useVip();
->>>>>>> 67c96239e64206001a38f86f51916abb4f68a57d:src/routes/feed.tsx
   const [liked, setLiked] = useState(false);
   const navigate = useNavigate();
 
@@ -146,18 +142,9 @@ function PostCard({ postId }: { postId: string }) {
               setLiked(false);
               return;
             }
-<<<<<<< HEAD:conex-o-privada-real-main/src/routes/feed.tsx
             if (tryUseLike()) setLiked(true);
           }}
           aria-label={liked ? "Descurtir publicação" : "Curtir publicação"}
-=======
-            if (!registerLike()) {
-              toast("Limite de curtidas do plano Free atingido — assine o VIP para curtir sem limites.");
-              return;
-            }
-            setLiked(true);
-          }}
->>>>>>> 67c96239e64206001a38f86f51916abb4f68a57d:src/routes/feed.tsx
           className={`flex items-center gap-1.5 text-sm ${liked ? "text-primary-glow" : "text-muted-foreground"}`}
         >
           <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />
