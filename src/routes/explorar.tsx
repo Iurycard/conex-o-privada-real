@@ -232,6 +232,10 @@ function ExplorePage() {
             </Dialog>
           </div>
 
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Crown className="h-3 w-3 text-gold" /> Assinantes VIP aparecem primeiro nos resultados.
+          </p>
+
           <div className="mt-1 grid grid-cols-2 gap-3 pb-6 md:grid-cols-3">
             {list.map((p) => (
               <Link
