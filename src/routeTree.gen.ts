@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as EditarPerfilRouteImport } from './routes/editar-perfil'
 import { Route as EventosRouteImport } from './routes/eventos'
 import { Route as ExplorarRouteImport } from './routes/explorar'
 import { Route as FeedRouteImport } from './routes/feed'
@@ -21,6 +22,7 @@ import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as SaidaRouteImport } from './routes/saida'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ConfiguracoesAmigosRouteImport } from './routes/configuracoes.amigos'
+import { Route as ConfiguracoesBloqueadosRouteImport } from './routes/configuracoes.bloqueados'
 import { Route as PerfilIndexRouteImport } from './routes/perfil.index'
 import { Route as PerfilIdRouteImport } from './routes/perfil.$id'
 
@@ -42,6 +44,11 @@ const ChatRoute = ChatRouteImport.update({
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EditarPerfilRoute = EditarPerfilRouteImport.update({
+  id: '/editar-perfil',
+  path: '/editar-perfil',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EventosRoute = EventosRouteImport.update({
@@ -84,6 +91,11 @@ const ConfiguracoesAmigosRoute = ConfiguracoesAmigosRouteImport.update({
   path: '/amigos',
   getParentRoute: () => ConfiguracoesRoute,
 } as any)
+const ConfiguracoesBloqueadosRoute = ConfiguracoesBloqueadosRouteImport.update({
+  id: '/bloqueados',
+  path: '/bloqueados',
+  getParentRoute: () => ConfiguracoesRoute,
+} as any)
 const PerfilIndexRoute = PerfilIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -100,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/cadastro': typeof CadastroRoute
   '/chat': typeof ChatRoute
   '/configuracoes': typeof ConfiguracoesRouteWithChildren
+  '/editar-perfil': typeof EditarPerfilRoute
   '/eventos': typeof EventosRoute
   '/explorar': typeof ExplorarRoute
   '/feed': typeof FeedRoute
@@ -108,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/configuracoes/amigos': typeof ConfiguracoesAmigosRoute
+  '/configuracoes/bloqueados': typeof ConfiguracoesBloqueadosRoute
   '/perfil/$id': typeof PerfilIdRoute
   '/perfil/': typeof PerfilIndexRoute
 }
@@ -116,6 +130,7 @@ export interface FileRoutesByTo {
   '/cadastro': typeof CadastroRoute
   '/chat': typeof ChatRoute
   '/configuracoes': typeof ConfiguracoesRouteWithChildren
+  '/editar-perfil': typeof EditarPerfilRoute
   '/eventos': typeof EventosRoute
   '/explorar': typeof ExplorarRoute
   '/feed': typeof FeedRoute
@@ -123,6 +138,7 @@ export interface FileRoutesByTo {
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/configuracoes/amigos': typeof ConfiguracoesAmigosRoute
+  '/configuracoes/bloqueados': typeof ConfiguracoesBloqueadosRoute
   '/perfil/$id': typeof PerfilIdRoute
   '/perfil': typeof PerfilIndexRoute
 }
@@ -132,6 +148,7 @@ export interface FileRoutesById {
   '/cadastro': typeof CadastroRoute
   '/chat': typeof ChatRoute
   '/configuracoes': typeof ConfiguracoesRouteWithChildren
+  '/editar-perfil': typeof EditarPerfilRoute
   '/eventos': typeof EventosRoute
   '/explorar': typeof ExplorarRoute
   '/feed': typeof FeedRoute
@@ -140,6 +157,7 @@ export interface FileRoutesById {
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/configuracoes/amigos': typeof ConfiguracoesAmigosRoute
+  '/configuracoes/bloqueados': typeof ConfiguracoesBloqueadosRoute
   '/perfil/$id': typeof PerfilIdRoute
   '/perfil/': typeof PerfilIndexRoute
 }
@@ -150,6 +168,7 @@ export interface FileRouteTypes {
     | '/cadastro'
     | '/chat'
     | '/configuracoes'
+    | '/editar-perfil'
     | '/eventos'
     | '/explorar'
     | '/feed'
@@ -158,6 +177,7 @@ export interface FileRouteTypes {
     | '/saida'
     | '/sitemap.xml'
     | '/configuracoes/amigos'
+    | '/configuracoes/bloqueados'
     | '/perfil/$id'
     | '/perfil/'
   fileRoutesByTo: FileRoutesByTo
@@ -166,6 +186,7 @@ export interface FileRouteTypes {
     | '/cadastro'
     | '/chat'
     | '/configuracoes'
+    | '/editar-perfil'
     | '/eventos'
     | '/explorar'
     | '/feed'
@@ -173,6 +194,7 @@ export interface FileRouteTypes {
     | '/saida'
     | '/sitemap.xml'
     | '/configuracoes/amigos'
+    | '/configuracoes/bloqueados'
     | '/perfil/$id'
     | '/perfil'
   id:
@@ -181,6 +203,7 @@ export interface FileRouteTypes {
     | '/cadastro'
     | '/chat'
     | '/configuracoes'
+    | '/editar-perfil'
     | '/eventos'
     | '/explorar'
     | '/feed'
@@ -189,6 +212,7 @@ export interface FileRouteTypes {
     | '/saida'
     | '/sitemap.xml'
     | '/configuracoes/amigos'
+    | '/configuracoes/bloqueados'
     | '/perfil/$id'
     | '/perfil/'
   fileRoutesById: FileRoutesById
@@ -198,6 +222,7 @@ export interface RootRouteChildren {
   CadastroRoute: typeof CadastroRoute
   ChatRoute: typeof ChatRoute
   ConfiguracoesRoute: typeof ConfiguracoesRouteWithChildren
+  EditarPerfilRoute: typeof EditarPerfilRoute
   EventosRoute: typeof EventosRoute
   ExplorarRoute: typeof ExplorarRoute
   FeedRoute: typeof FeedRoute
@@ -235,6 +260,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracoes'
       fullPath: '/configuracoes'
       preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/editar-perfil': {
+      id: '/editar-perfil'
+      path: '/editar-perfil'
+      fullPath: '/editar-perfil'
+      preLoaderRoute: typeof EditarPerfilRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/eventos': {
@@ -293,6 +325,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracoesAmigosRouteImport
       parentRoute: typeof ConfiguracoesRoute
     }
+    '/configuracoes/bloqueados': {
+      id: '/configuracoes/bloqueados'
+      path: '/bloqueados'
+      fullPath: '/configuracoes/bloqueados'
+      preLoaderRoute: typeof ConfiguracoesBloqueadosRouteImport
+      parentRoute: typeof ConfiguracoesRoute
+    }
     '/perfil/': {
       id: '/perfil/'
       path: '/'
@@ -312,10 +351,12 @@ declare module '@tanstack/react-router' {
 
 interface ConfiguracoesRouteChildren {
   ConfiguracoesAmigosRoute: typeof ConfiguracoesAmigosRoute
+  ConfiguracoesBloqueadosRoute: typeof ConfiguracoesBloqueadosRoute
 }
 
 const ConfiguracoesRouteChildren: ConfiguracoesRouteChildren = {
   ConfiguracoesAmigosRoute: ConfiguracoesAmigosRoute,
+  ConfiguracoesBloqueadosRoute: ConfiguracoesBloqueadosRoute,
 }
 
 const ConfiguracoesRouteWithChildren = ConfiguracoesRoute._addFileChildren(
@@ -340,6 +381,7 @@ const rootRouteChildren: RootRouteChildren = {
   CadastroRoute: CadastroRoute,
   ChatRoute: ChatRoute,
   ConfiguracoesRoute: ConfiguracoesRouteWithChildren,
+  EditarPerfilRoute: EditarPerfilRoute,
   EventosRoute: EventosRoute,
   ExplorarRoute: ExplorarRoute,
   FeedRoute: FeedRoute,

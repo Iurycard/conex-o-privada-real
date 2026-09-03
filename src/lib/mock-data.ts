@@ -65,6 +65,8 @@ export type Profile = {
   vip: boolean;
   hue: number;
   bio: string;
+  gender?: string;
+  birthDate?: string;
   avatar?: string;
   cover?: string;
   lookingFor?: AccountType[];

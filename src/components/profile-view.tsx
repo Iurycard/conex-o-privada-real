@@ -54,7 +54,7 @@ const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
-  const { profiles, posts, isFollowing, toggleFollow } = useProfiles();
+  const { profiles, posts, isFollowing, toggleFollow, blockProfile } = useProfiles();
   const { isVip, openVipModal, tryUseLike } = useVip();
   const [expanded, setExpanded] = useState(false);
   const [lightbox, setLightbox] = useState<{ photos: number[]; index: number } | null>(null);
@@ -161,7 +161,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <DropdownMenuItem onClick={() => toast.success("Publicação no mural criada")}>
               <PenSquare className="mr-2 h-4 w-4" /> Postar no mural
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => toast.success(`${profile.nick} bloqueado`)}>
+            <DropdownMenuItem onClick={() => { blockProfile(profile.id); toast.success(`${profile.nick} bloqueado`); navigate({ to: "/explorar" }); }}>
               <Ban className="mr-2 h-4 w-4" /> Bloquear
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => toast.success("Denúncia enviada para moderação")}>

@@ -29,6 +29,11 @@ type ProfilesContextValue = {
   setCurrentId: (id: string) => void;
   getProfile: (id: string) => Profile | undefined;
   addProfile: (input: NewProfileInput) => string;
+  updateCurrentAlbums: (album: "public" | "private", photos: string[]) => void;
+  updateCurrentProfile: (changes: Partial<Pick<Profile, "nick" | "type" | "gender" | "birthDate" | "city" | "bio" | "lookingFor" | "avatar">>) => void;
+  blockedIds: string[];
+  blockProfile: (id: string) => void;
+  unblockProfile: (id: string) => void;
   isFollowing: (id: string) => boolean;
   toggleFollow: (id: string) => void;
 };
@@ -40,6 +45,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   const [posts, setPosts] = useState<Post[]>(seedPosts);
   const [currentId, setCurrentId] = useState<string>(seedProfiles[0]!.id);
   const [following, setFollowing] = useState<Record<string, boolean>>({});
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
 
   const value = useMemo<ProfilesContextValue>(() => {
     const getProfile = (id: string) => profiles.find((p) => p.id === id);
@@ -87,10 +93,21 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         setCurrentId(id);
         return id;
       },
+      updateCurrentAlbums: (album, photos) => {
+        setProfiles((list) => list.map((profile) => profile.id === currentId
+          ? { ...profile, [album === "public" ? "publicAlbum" : "privateAlbum"]: photos }
+          : profile));
+      },
+      updateCurrentProfile: (changes) => {
+        setProfiles((list) => list.map((profile) => profile.id === currentId ? { ...profile, ...changes } : profile));
+      },
+      blockedIds,
+      blockProfile: (id) => setBlockedIds((ids) => ids.includes(id) ? ids : [...ids, id]),
+      unblockProfile: (id) => setBlockedIds((ids) => ids.filter((blockedId) => blockedId !== id)),
       isFollowing: (id: string) => !!following[id],
       toggleFollow: (id: string) => setFollowing((f) => ({ ...f, [id]: !f[id] })),
     };
-  }, [profiles, posts, currentId, following]);
+  }, [profiles, posts, currentId, following, blockedIds]);
 
   return <ProfilesContext.Provider value={value}>{children}</ProfilesContext.Provider>;
 }
