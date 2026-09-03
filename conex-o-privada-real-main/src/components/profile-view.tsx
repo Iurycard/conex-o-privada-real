@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Eye,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -54,12 +55,14 @@ const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
   const { profiles, posts, isFollowing, toggleFollow } = useProfiles();
-  const { isVip, openVipModal } = useVip();
+  const { isVip, openVipModal, tryUseLike } = useVip();
   const [expanded, setExpanded] = useState(false);
   const [lightbox, setLightbox] = useState<{ photos: number[]; index: number } | null>(null);
   const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
+  const [privateAccessRequested, setPrivateAccessRequested] = useState(false);
 
   const vip = isOwner ? isVip : profile.vip;
+  const canViewPrivateAlbum = isOwner;
   const following = isFollowing(profile.id);
 
   const stats = useMemo(
@@ -110,7 +113,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
 
         {isOwner ? (
           <button
-            onClick={() => toast("Abra o compositor de publicação no topo do app")}
+            onClick={() => toast(isVip ? "Compositor aberto: você pode publicar fotos e vídeos" : "Compositor aberto: Free pode publicar fotos; vídeos são exclusivos VIP")}
             className="inline-flex items-center gap-1.5 rounded-full bg-gradient-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-neon"
           >
             <PenSquare className="h-3.5 w-3.5" /> Postar
@@ -118,6 +121,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         ) : (
           <button
             onClick={() => {
+              if (!following && !tryUseLike()) return;
               toggleFollow(profile.id);
               toast.success(following ? "Você deixou de seguir" : `Agora você segue ${profile.nick}`);
             }}
@@ -132,7 +136,14 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         )}
 
         <Link
-          to="/chat"
+          to={isVip ? "/chat" : "/perfil/$id"}
+          params={isVip ? undefined : { id: profile.id }}
+          onClick={(event) => {
+            if (!isVip) {
+              event.preventDefault();
+              openVipModal();
+            }
+          }}
           aria-label="Bate-papo"
           className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2"
         >
@@ -144,7 +155,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <MoreVertical className="h-5 w-5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 border-border bg-surface">
-            <DropdownMenuItem onClick={() => navigate({ to: "/chat" })}>
+            <DropdownMenuItem onClick={() => (isVip ? navigate({ to: "/chat" }) : openVipModal())}>
               <MessageSquare className="mr-2 h-4 w-4" /> Mensagem privada
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => toast.success("Publicação no mural criada")}>
@@ -262,6 +273,27 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           </button>
         </p>
 
+        {isOwner && (
+          <section className="mt-5 rounded-xl border border-gold/30 bg-gold/5 p-4 text-left">
+            <div className="flex items-center gap-2">
+              <Eye className="h-4 w-4 text-gold" />
+              <h2 className="text-sm font-semibold">Quem visitou seu perfil</h2>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              {connectionProfiles.slice(0, 5).map((visitor) => (
+                <div key={visitor.id} className={!isVip ? "blur-md" : ""}>
+                  <AvatarOrb profile={visitor} size={38} />
+                </div>
+              ))}
+            </div>
+            {!isVip && (
+              <button onClick={openVipModal} className="mt-3 text-xs font-medium text-gold hover:underline">
+                Assine o VIP para ver quem visitou seu perfil
+              </button>
+            )}
+          </section>
+        )}
+
         {/* TABS */}
         <Tabs defaultValue="principal" className="mt-6 text-left">
           <TabsList className="w-full bg-surface">
@@ -341,18 +373,30 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 <div className="grid grid-cols-3 gap-2">
                   {privatePhotos.map((h, i) => (
                     <div key={i} className="relative aspect-square overflow-hidden rounded-xl">
-                      <MediaBlock hue={h} src={profile.privateAlbum?.[i]} alt="" className="h-full w-full blur-lg" />
-                      <div className="absolute inset-0 grid place-items-center bg-background/40">
-                        <Lock className="h-5 w-5 text-gold" />
-                      </div>
+                      <MediaBlock
+                        hue={h}
+                        src={profile.privateAlbum?.[i]}
+                        alt={canViewPrivateAlbum ? `Foto privada de ${profile.nick}` : "Foto privada bloqueada"}
+                        className={`h-full w-full ${canViewPrivateAlbum ? "" : "blur-lg"}`}
+                      />
+                      {!canViewPrivateAlbum && (
+                        <div className="absolute inset-0 grid place-items-center bg-background/40">
+                          <Lock className="h-5 w-5 text-gold" />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
                 <button
-                  onClick={() => toast.success("Solicitação de acesso enviada")}
-                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-gold/45 bg-gold/5 py-3 text-sm font-medium text-gold hover:bg-gold/10"
+                  onClick={() => {
+                    setPrivateAccessRequested(true);
+                    toast.success("Solicitação enviada ao dono do álbum");
+                  }}
+                  disabled={privateAccessRequested}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-gold/45 bg-gold/5 py-3 text-sm font-medium text-gold hover:bg-gold/10 disabled:cursor-default disabled:opacity-70"
                 >
-                  <Lock className="h-4 w-4" /> Solicitar Acesso ao Álbum Privado
+                  <Lock className="h-4 w-4" />
+                  {privateAccessRequested ? "Aguardando autorização do dono" : "Solicitar Acesso ao Álbum Privado"}
                 </button>
                 {!isVip && (
                   <button

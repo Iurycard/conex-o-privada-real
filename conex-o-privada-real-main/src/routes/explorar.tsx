@@ -18,6 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useVip } from "@/context/vip";
 
 export const Route = createFileRoute("/explorar")({
   head: () => ({
@@ -41,6 +42,7 @@ const MAX_DISTANCE = 30;
 
 function ExplorePage() {
   const { profiles } = useProfiles();
+  const { isVip, openVipModal } = useVip();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<string[]>([]);
   const [city, setCity] = useState("Todas");
@@ -48,16 +50,18 @@ function ExplorePage() {
   const [ageRange, setAgeRange] = useState<number[]>([18, 65]);
   const [lookingFor, setLookingFor] = useState<string>("Todos");
 
-  const list = profiles.filter(
-    (p) =>
-      (filter.length === 0 || filter.includes(p.type)) &&
-      (city === "Todas" || p.city === city) &&
-      (lookingFor === "Todos" || (p.lookingFor ?? []).includes(lookingFor as AccountType)) &&
-      p.nick.toLowerCase().includes(q.toLowerCase()) &&
-      p.distanceKm <= distance[0]! &&
-      p.age >= ageRange[0]! &&
-      p.age <= ageRange[1]!,
-  );
+  const list = profiles
+    .filter(
+      (p) =>
+        (filter.length === 0 || filter.includes(p.type)) &&
+        (city === "Todas" || p.city === city) &&
+        (lookingFor === "Todos" || (p.lookingFor ?? []).includes(lookingFor as AccountType)) &&
+        p.nick.toLowerCase().includes(q.toLowerCase()) &&
+        p.distanceKm <= distance[0]! &&
+        p.age >= ageRange[0]! &&
+        p.age <= ageRange[1]!,
+    )
+    .sort((a, b) => Number(b.vip) - Number(a.vip));
 
   const activeFilters =
     (filter.length > 0 ? 1 : 0) +
@@ -228,6 +232,16 @@ function ExplorePage() {
               </DialogContent>
             </Dialog>
           </div>
+
+          {!isVip && (
+            <button
+              type="button"
+              onClick={openVipModal}
+              className="w-full rounded-xl border border-gold/30 bg-gold/5 p-3 text-left text-xs text-foreground/90"
+            >
+              <span className="font-semibold text-gold">Perfis VIP aparecem primeiro.</span> Assine para destacar seu perfil e encontrar conexões com prioridade.
+            </button>
+          )}
 
           <div className="mt-1 grid grid-cols-2 gap-3 pb-6 md:grid-cols-3">
             {list.map((p) => (

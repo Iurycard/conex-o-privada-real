@@ -7,6 +7,8 @@ type VipContextValue = {
   vipModalOpen: boolean;
   openVipModal: () => void;
   closeVipModal: () => void;
+  likesUsedToday: number;
+  tryUseLike: () => boolean;
 };
 
 const VipContext = createContext<VipContextValue | null>(null);
@@ -14,6 +16,7 @@ const VipContext = createContext<VipContextValue | null>(null);
 export function VipProvider({ children }: { children: ReactNode }) {
   const [isVip, setVip] = useState(false);
   const [vipModalOpen, setVipModalOpen] = useState(false);
+  const [likesUsedToday, setLikesUsedToday] = useState(0);
 
   const value = useMemo<VipContextValue>(
     () => ({
@@ -23,8 +26,18 @@ export function VipProvider({ children }: { children: ReactNode }) {
       vipModalOpen,
       openVipModal: () => setVipModalOpen(true),
       closeVipModal: () => setVipModalOpen(false),
+      likesUsedToday,
+      tryUseLike: () => {
+        if (isVip) return true;
+        if (likesUsedToday >= 20) {
+          setVipModalOpen(true);
+          return false;
+        }
+        setLikesUsedToday((count) => count + 1);
+        return true;
+      },
     }),
-    [isVip, vipModalOpen],
+    [isVip, likesUsedToday, vipModalOpen],
   );
 
   return <VipContext.Provider value={value}>{children}</VipContext.Provider>;
