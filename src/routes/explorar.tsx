@@ -48,16 +48,19 @@ function ExplorePage() {
   const [ageRange, setAgeRange] = useState<number[]>([18, 65]);
   const [lookingFor, setLookingFor] = useState<string>("Todos");
 
-  const list = profiles.filter(
-    (p) =>
-      (filter.length === 0 || filter.includes(p.type)) &&
-      (city === "Todas" || p.city === city) &&
-      (lookingFor === "Todos" || (p.lookingFor ?? []).includes(lookingFor as AccountType)) &&
-      p.nick.toLowerCase().includes(q.toLowerCase()) &&
-      p.distanceKm <= distance[0]! &&
-      p.age >= ageRange[0]! &&
-      p.age <= ageRange[1]!,
-  );
+  const list = profiles
+    .filter(
+      (p) =>
+        (filter.length === 0 || filter.includes(p.type)) &&
+        (city === "Todas" || p.city === city) &&
+        (lookingFor === "Todos" || (p.lookingFor ?? []).includes(lookingFor as AccountType)) &&
+        p.nick.toLowerCase().includes(q.toLowerCase()) &&
+        p.distanceKm <= distance[0]! &&
+        p.age >= ageRange[0]! &&
+        p.age <= ageRange[1]!,
+    )
+    // Regra VIP: assinantes têm preferência e aparecem antes dos perfis Free
+    .sort((a, b) => Number(b.vip) - Number(a.vip));
 
   const activeFilters =
     (filter.length > 0 ? 1 : 0) +
