@@ -106,11 +106,7 @@ export function randomPrivateAlbum() {
 }
 
 export function randomPublicAlbum() {
- return [
-    albumPool[Math.floor(Math.random() * albumPool.length)],
-    albumPool[Math.floor(Math.random() * albumPool.length)],
-    albumPool[Math.floor(Math.random() * albumPool.length)],
- ]
+  return albumFrom(Math.floor(Math.random() * albumPool.length), 3);
 }
 
 

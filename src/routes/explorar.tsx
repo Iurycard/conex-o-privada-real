@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { MapPin, Search, SlidersHorizontal, Plus } from "lucide-react";
+import { MapPin, Search, SlidersHorizontal, Plus, Crown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { MediaBlock, PageHeader, TypeBadge, VipBadge } from "@/components/bits";
 import { EventCard } from "@/components/event-card";
@@ -61,6 +61,10 @@ function ExplorePage() {
         p.age >= ageRange[0]! &&
         p.age <= ageRange[1]!,
     )
+<<<<<<< HEAD:conex-o-privada-real-main/src/routes/explorar.tsx
+=======
+    // Regra VIP: assinantes têm preferência e aparecem antes dos perfis Free
+>>>>>>> 67c96239e64206001a38f86f51916abb4f68a57d:src/routes/explorar.tsx
     .sort((a, b) => Number(b.vip) - Number(a.vip));
 
   const activeFilters =
@@ -233,6 +237,7 @@ function ExplorePage() {
             </Dialog>
           </div>
 
+<<<<<<< HEAD:conex-o-privada-real-main/src/routes/explorar.tsx
           {!isVip && (
             <button
               type="button"
@@ -242,6 +247,11 @@ function ExplorePage() {
               <span className="font-semibold text-gold">Perfis VIP aparecem primeiro.</span> Assine para destacar seu perfil e encontrar conexões com prioridade.
             </button>
           )}
+=======
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Crown className="h-3 w-3 text-gold" /> Assinantes VIP aparecem primeiro nos resultados.
+          </p>
+>>>>>>> 67c96239e64206001a38f86f51916abb4f68a57d:src/routes/explorar.tsx
 
           <div className="mt-1 grid grid-cols-2 gap-3 pb-6 md:grid-cols-3">
             {list.map((p) => (
