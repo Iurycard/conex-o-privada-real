@@ -42,7 +42,7 @@ function NotificationsPage() {
               key={p.id}
               to="/perfil/$id"
               params={{ id: p.id }}
-              className={`flex items-center gap-3 rounded-2xl border bg-surface p-3 transition-colors hover:border-primary/50 ${
+              className={`flex items-center gap-3 rounded-xl border bg-surface p-3 transition-colors hover:border-primary/50 ${
                 i < 2 ? "border-primary/30" : "border-border"
               }`}
             >

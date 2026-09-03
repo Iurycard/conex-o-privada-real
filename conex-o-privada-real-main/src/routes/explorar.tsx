@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { MapPin, Search, SlidersHorizontal, Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { AvatarOrb, PageHeader, TypeBadge, VipBadge } from "@/components/bits";
+import { MediaBlock, PageHeader, TypeBadge, VipBadge } from "@/components/bits";
 import { EventCard } from "@/components/event-card";
 import { accountTypes, events, type AccountType } from "@/lib/mock-data";
 import { useProfiles } from "@/context/profiles-context";
@@ -42,14 +42,16 @@ const MAX_DISTANCE = 30;
 function ExplorePage() {
   const { profiles } = useProfiles();
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<string>("Todos");
+  const [filter, setFilter] = useState<string[]>([]);
+  const [city, setCity] = useState("Todas");
   const [distance, setDistance] = useState<number[]>([MAX_DISTANCE]);
   const [ageRange, setAgeRange] = useState<number[]>([18, 65]);
   const [lookingFor, setLookingFor] = useState<string>("Todos");
 
   const list = profiles.filter(
     (p) =>
-      (filter === "Todos" || p.type === filter) &&
+      (filter.length === 0 || filter.includes(p.type)) &&
+      (city === "Todas" || p.city === city) &&
       (lookingFor === "Todos" || (p.lookingFor ?? []).includes(lookingFor as AccountType)) &&
       p.nick.toLowerCase().includes(q.toLowerCase()) &&
       p.distanceKm <= distance[0]! &&
@@ -58,7 +60,8 @@ function ExplorePage() {
   );
 
   const activeFilters =
-    (filter !== "Todos" ? 1 : 0) +
+    (filter.length > 0 ? 1 : 0) +
+    (city !== "Todas" ? 1 : 0) +
     (lookingFor !== "Todos" ? 1 : 0) +
     (distance[0]! < MAX_DISTANCE ? 1 : 0) +
     (ageRange[0]! > 18 || ageRange[1]! < 65 ? 1 : 0);
@@ -69,10 +72,10 @@ function ExplorePage() {
 
       <Tabs defaultValue="perfis" className="px-4 md:px-0">
         <TabsList className="w-full bg-surface">
-          <TabsTrigger value="perfis" className="flex-1">
+          <TabsTrigger value="perfis" className="flex-1 px-2 text-xs sm:text-sm">
             Perfis
           </TabsTrigger>
-          <TabsTrigger value="eventos" className="flex-1">
+          <TabsTrigger value="eventos" className="flex-1 px-2 text-xs sm:text-sm">
             Eventos & Baladas
           </TabsTrigger>
         </TabsList>
@@ -91,7 +94,7 @@ function ExplorePage() {
             </div>
 
             <Dialog>
-              <DialogTrigger className="relative inline-flex shrink-0 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-muted-foreground hover:text-foreground">
+              <DialogTrigger className="relative inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-muted-foreground hover:text-foreground">
                 <SlidersHorizontal className="h-4 w-4" /> Filtros
                 {activeFilters > 0 && (
                   <span className="grid h-5 min-w-5 place-items-center rounded-full bg-gradient-primary px-1 text-[10px] font-semibold text-primary-foreground">
@@ -99,7 +102,7 @@ function ExplorePage() {
                   </span>
                 )}
               </DialogTrigger>
-              <DialogContent className="border-border bg-surface sm:max-w-md">
+              <DialogContent className="max-h-[85vh] overflow-y-auto border-border bg-surface sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Filtrar busca</DialogTitle>
                   <DialogDescription>Refine por tipo de perfil, distância e idade.</DialogDescription>
@@ -109,12 +112,16 @@ function ExplorePage() {
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground">Busca por perfil</p>
                     <div className="flex flex-wrap gap-2">
-                      {["Todos", ...accountTypes].map((t) => (
+                      {accountTypes.map((t) => (
                         <button
                           key={t}
-                          onClick={() => setFilter(t)}
+                          onClick={() =>
+                            setFilter((current) =>
+                              current.includes(t) ? current.filter((item) => item !== t) : [...current, t],
+                            )
+                          }
                           className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                            filter === t
+                            filter.includes(t)
                               ? "border-transparent bg-gradient-primary text-primary-foreground"
                               : "border-border bg-surface-2 text-muted-foreground hover:text-foreground"
                           }`}
@@ -123,6 +130,28 @@ function ExplorePage() {
                         </button>
                       ))}
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {filter.length > 0 ? `${filter.length} tipo(s) selecionado(s)` : "Todos os tipos"}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="explore-city" className="text-xs font-medium text-muted-foreground">
+                      Escolher cidade
+                    </label>
+                    <select
+                      id="explore-city"
+                      value={city}
+                      onChange={(event) => setCity(event.target.value)}
+                      className="h-10 w-full rounded-md border border-border bg-surface-2 px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="Todas">Todas as cidades</option>
+                      {[...new Set(profiles.map((profile) => profile.city))].sort().map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="space-y-2">
@@ -160,6 +189,7 @@ function ExplorePage() {
                       step={1}
                       aria-label="Distância máxima em quilômetros"
                     />
+                    <p className="text-[11px] text-muted-foreground">Perfis até {distance[0]} km de distância</p>
                   </div>
 
                   <div className="space-y-3">
@@ -177,11 +207,15 @@ function ExplorePage() {
                       step={1}
                       aria-label="Faixa de idade"
                     />
+                    <p className="text-[11px] text-muted-foreground">
+                      Entre {ageRange[0]} e {ageRange[1]} anos
+                    </p>
                   </div>
 
                   <button
                     onClick={() => {
-                      setFilter("Todos");
+                      setFilter([]);
+                      setCity("Todas");
                       setLookingFor("Todos");
                       setDistance([MAX_DISTANCE]);
                       setAgeRange([18, 65]);
@@ -201,13 +235,18 @@ function ExplorePage() {
                 key={p.id}
                 to="/perfil/$id"
                 params={{ id: p.id }}
-                className={`block overflow-hidden rounded-2xl border bg-surface p-4 transition-colors hover:border-primary/50 ${
+                className={`block overflow-hidden rounded-xl border bg-surface p-3 transition-colors hover:border-primary/50 sm:p-4 ${
                   p.vip ? "border-gold/35" : "border-border"
                 }`}
               >
-                <div className="flex items-start justify-between">
-                  <AvatarOrb profile={p} size={48} />
-                  {p.vip && <VipBadge />}
+                <div className="relative">
+                  <MediaBlock
+                    hue={p.hue}
+                    src={p.avatar}
+                    alt={`Foto de perfil de ${p.nick}`}
+                    className="aspect-square w-full rounded-xl"
+                  />
+                  {p.vip && <VipBadge className="absolute right-2 top-2" />}
                 </div>
                 <p className="mt-3 truncate text-sm font-semibold">
                   {p.nick} <span className="text-muted-foreground">· {p.age}</span>
@@ -230,7 +269,7 @@ function ExplorePage() {
         <TabsContent value="eventos" className="mt-4">
           <button
             onClick={() => toast("Área de produtores — protótipo visual")}
-            className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-surface py-3 text-sm text-muted-foreground hover:text-foreground"
+            className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-3 text-sm text-muted-foreground hover:text-foreground"
           >
             <Plus className="h-4 w-4" /> Sou produtor — divulgar evento
           </button>

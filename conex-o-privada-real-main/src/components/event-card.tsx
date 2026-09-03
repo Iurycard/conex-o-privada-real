@@ -16,7 +16,7 @@ export function EventCard({ id }: { id: string }) {
 
   return (
     <article
-      className={`overflow-hidden rounded-2xl border bg-surface ${ev.vip ? "border-gold/35" : "border-border"}`}
+      className={`overflow-hidden rounded-xl border bg-surface ${ev.vip ? "border-gold/35" : "border-border"}`}
     >
       <div className="relative">
         {eventCovers[ev.id] ? (

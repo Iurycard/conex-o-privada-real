@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Heart, MessageSquare, Share2, Play, Lock, Crown, Megaphone } from "lucide-react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Heart, MessageSquare, MoreHorizontal, Play, Lock, Crown, Megaphone } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AvatarOrb, MediaBlock, VipBadge } from "@/components/bits";
@@ -7,6 +7,17 @@ import { ads, posts, profileById } from "@/lib/mock-data";
 import { useVip } from "@/context/vip";
 import { useProfiles } from "@/context/profiles-context";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/feed")({
   head: () => ({
@@ -28,14 +39,59 @@ function PostCard({ postId }: { postId: string }) {
   const author = profileById(post.authorId);
   const { isVip, openVipModal } = useVip();
   const [liked, setLiked] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <article
-      className={`overflow-hidden border-b border-border/60 bg-surface md:rounded-2xl md:border ${
+      className={`overflow-hidden border-b border-border/60 bg-surface md:rounded-xl md:border ${
         author.vip ? "md:border-gold/25" : ""
       }`}
     >
-      <div className="flex items-center gap-3 p-4">
+      <div className="relative flex items-center gap-3 p-4">
+        <Dialog>
+          <DialogTrigger asChild>
+            <button
+              type="button"
+              className="absolute right-4 top-4 grid h-6 w-6 place-items-center rounded-full hover:bg-surface-2 hover:text-foreground"
+              aria-label={`Mais opções da postagem de ${author.nick}`}
+              title="Mais opções"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[85vh] overflow-y-auto border-border bg-surface sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Opções da postagem</DialogTitle>
+              <DialogDescription>Escolha uma ação para esta publicação.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => navigate({ to: "/perfil/$id", params: { id: author.id } })}
+                className="rounded-lg border border-border bg-surface-2 px-4 py-3 text-left text-sm hover:text-foreground"
+              >
+                Visitar @{author.nick}
+              </button>
+              <button
+                type="button"
+                onClick={() => toast.success("Perfil denunciado (protótipo)")}
+                className="rounded-lg border border-border bg-surface-2 px-4 py-3 text-left text-sm text-destructive hover:text-destructive"
+              >
+                Denunciar perfil
+              </button>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <button
+                  type="button"
+                  className="rounded-lg border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Voltar
+                </button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <AvatarOrb profile={author} size={40} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -43,8 +99,11 @@ function PostCard({ postId }: { postId: string }) {
             {author.vip && <VipBadge />}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {author.type} · {author.city} · {post.time}
+            {author.type} · {author.city}
           </p>
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span>{post.time}</span>
+          </div>
         </div>
       </div>
 
@@ -81,14 +140,11 @@ function PostCard({ postId }: { postId: string }) {
           onClick={() => setLiked((v) => !v)}
           className={`flex items-center gap-1.5 text-sm ${liked ? "text-primary-glow" : "text-muted-foreground"}`}
         >
-          <Heart className={`h-4.5 w-4.5 ${liked ? "fill-current" : ""}`} />
+          <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />
           {post.likes + (liked ? 1 : 0)}
         </button>
         <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <MessageSquare className="h-4.5 w-4.5" /> {post.comments}
-        </span>
-        <span className="ml-auto text-muted-foreground">
-          <Share2 className="h-4.5 w-4.5" />
+          <MessageSquare className="h-4 w-4" /> {post.comments}
         </span>
       </div>
     </article>
@@ -99,7 +155,7 @@ function AdCard({ index }: { index: number }) {
   const ad = ads[index % ads.length]!;
   const { openVipModal } = useVip();
   return (
-    <div className="border-b border-border/60 bg-surface p-4 md:rounded-2xl md:border">
+    <div className="border-b border-border/60 bg-surface p-4 md:rounded-xl md:border">
       <div className="mb-3 flex items-center justify-between">
         <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
           <Megaphone className="h-3 w-3" /> Anúncio local
@@ -134,12 +190,12 @@ function FeedPage() {
   return (
     <AppShell>
       <div className="mx-auto w-full max-w-xl">
-      <h1 className="px-4 pt-5 text-2xl font-semibold md:px-0">Feed da comunidade</h1>
+      <h1 className="px-4 pt-5 text-xl font-semibold sm:text-2xl md:px-0">Feed da comunidade</h1>
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="px-4 pt-4 md:px-0">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="seguindo">Seguindo</TabsTrigger>
-          <TabsTrigger value="paravoce">Para você</TabsTrigger>
-          <TabsTrigger value="todos">Todos</TabsTrigger>
+          <TabsTrigger value="seguindo" className="px-2 text-xs sm:text-sm">Seguindo</TabsTrigger>
+          <TabsTrigger value="paravoce" className="px-2 text-xs sm:text-sm">Para você</TabsTrigger>
+          <TabsTrigger value="todos" className="px-2 text-xs sm:text-sm">Todos</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -148,7 +204,7 @@ function FeedPage() {
         {!isVip && (
           <button
             onClick={openVipModal}
-            className="mx-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-2xl border border-gold/35 bg-gold/5 p-4 text-left md:mx-0 md:w-full"
+            className="mx-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-xl border border-gold/35 bg-gold/5 p-4 text-left md:mx-0 md:w-full"
           >
             <Crown className="h-5 w-5 shrink-0 text-gold" />
             <span className="text-sm text-foreground/90">

@@ -53,10 +53,11 @@ const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
-  const { posts, isFollowing, toggleFollow } = useProfiles();
+  const { profiles, posts, isFollowing, toggleFollow } = useProfiles();
   const { isVip, openVipModal } = useVip();
   const [expanded, setExpanded] = useState(false);
   const [lightbox, setLightbox] = useState<{ photos: number[]; index: number } | null>(null);
+  const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
 
   const vip = isOwner ? isVip : profile.vip;
   const following = isFollowing(profile.id);
@@ -74,6 +75,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
   );
 
   const timeline = useMemo(() => posts.filter((p) => p.authorId === profile.id), [posts, profile.id]);
+  const connectionProfiles = useMemo(
+    () => profiles.filter((item) => item.id !== profile.id),
+    [profiles, profile.id],
+  );
   const publicPhotos = useMemo(() => [0, 1, 2, 3, 4, 5].map((i) => profile.hue + i * 14), [profile.hue]);
   const privatePhotos = useMemo(() => [0, 1, 2, 3].map((i) => profile.hue + i * 21), [profile.hue]);
 
@@ -186,18 +191,58 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         </div>
 
         {/* MÉTRICAS */}
-        <div className="mt-4 grid grid-cols-3 divide-x divide-border rounded-2xl border border-border bg-surface py-3">
-          {[
-            [nf(stats.views), "visualizações"],
-            [nf(stats.following), "seguindo"],
-            [nf(stats.followers), "seguidores"],
-          ].map(([v, l]) => (
-            <div key={l}>
-              <p className="text-base font-semibold">{v}</p>
-              <p className="text-[11px] text-muted-foreground">{l}</p>
-            </div>
+        <div className="mt-4 grid grid-cols-3 divide-x divide-border rounded-xl border border-border bg-surface py-3">
+          <div>
+            <p className="text-base font-semibold">{nf(stats.views)}</p>
+            <p className="text-[11px] text-muted-foreground">visualizações</p>
+          </div>
+          {([
+            [nf(stats.following), "seguindo", "following"],
+            [nf(stats.followers), "seguidores", "followers"],
+          ] as const).map(([value, label, view]) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => {
+                if (!isVip) {
+                  openVipModal();
+                  return;
+                }
+                setConnectionsView(view);
+              }}
+              className="px-1 transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-label={`${label} de ${profile.nick}`}
+            >
+              <p className="text-base font-semibold">{value}</p>
+              <p className="text-[11px] text-muted-foreground">{label}</p>
+            </button>
           ))}
         </div>
+
+        <Dialog open={connectionsView !== null} onOpenChange={(open) => !open && setConnectionsView(null)}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto border-border bg-surface sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{connectionsView === "followers" ? "Seguidores" : "Seguindo"}</DialogTitle>
+            </DialogHeader>
+            <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+              {connectionProfiles.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => navigate({ to: "/perfil/$id", params: { id: item.id } })}
+                  className="flex w-full items-center gap-3 bg-surface px-3 py-3 text-left hover:bg-surface-2"
+                >
+                  <AvatarOrb profile={item} size={36} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{item.nick}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{item.city}</span>
+                  </span>
+                  {item.vip && <VipBadge />}
+                </button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* INFOS RÁPIDAS */}
         <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-left">

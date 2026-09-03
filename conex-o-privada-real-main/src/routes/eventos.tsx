@@ -42,7 +42,7 @@ function EventCard({ id }: { id: string }) {
 
   return (
     <article
-      className={`overflow-hidden rounded-2xl border bg-surface ${ev.vip ? "border-gold/35" : "border-border"}`}
+      className={`overflow-hidden rounded-xl border bg-surface ${ev.vip ? "border-gold/35" : "border-border"}`}
     >
       <div className="relative">
         {covers[ev.id] ? (
@@ -130,7 +130,7 @@ function EventsPage() {
       <div className="px-4 md:px-0">
         <button
           onClick={() => toast("Área de produtores — protótipo visual")}
-          className="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-surface py-3 text-sm text-muted-foreground hover:text-foreground"
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-3 text-sm text-muted-foreground hover:text-foreground"
         >
           <Plus className="h-4 w-4" /> Sou produtor — divulgar evento
         </button>

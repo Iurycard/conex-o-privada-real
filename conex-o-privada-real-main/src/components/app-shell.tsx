@@ -92,7 +92,7 @@ function Logo() {
       <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-primary shadow-neon">
         <Shield className="h-4 w-4 text-primary-foreground" />
       </span>
-      <span className="font-display text-sm font-semibold tracking-tight">
+      <span className="hidden font-display text-sm font-semibold tracking-tight min-[381px]:inline">
         Conexão <span className="text-primary-glow">Privada</span>
       </span>
     </Link>
@@ -109,9 +109,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       <header className="fixed inset-x-0 top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:px-4">
           <Logo />
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
             <label className="hidden items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 sm:flex">
               <span className="text-[11px] text-muted-foreground">Modo</span>
               <Switch checked={isVip} onCheckedChange={toggleVip} aria-label="Alternar Free/VIP" />
@@ -137,7 +137,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               variant="outline"
               size="icon"
               onClick={() => navigate({ to: "/configuracoes" })}
-              className="rounded-full border-border bg-surface text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+              className="h-10 w-10 shrink-0 rounded-full border-border bg-surface text-muted-foreground hover:bg-surface-2 hover:text-foreground"
               aria-label="Abrir configurações"
               title="Configurações"
             >

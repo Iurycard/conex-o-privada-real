@@ -3,13 +3,17 @@ import {
   ChevronRight,
   Edit3,
   Eye,
+  FileText,
   Image,
   Key,
   Lock,
+  MessageCircle,
   Mail,
   MoonStar,
   Phone,
+  Shield,
   Star,
+  Newspaper,
   UserX,
   Users,
 } from "lucide-react";
@@ -58,6 +62,7 @@ type SettingsIcon = ComponentType<{ className?: string }>;
 type SettingsRowProps = {
   icon?: SettingsIcon;
   label: string;
+  description?: string;
   value?: string;
   onClick: () => void;
   destructive?: boolean;
@@ -70,28 +75,33 @@ const metrics = [
 ];
 
 const general = [
-  { icon: Edit3, label: "Editar perfil" },
-  { icon: Lock, label: "Permissões e privacidade" },
-  { icon: UserX, label: "Perfis bloqueados" },
-  { icon: Star, label: "Minha assinatura", vip: true },
+  { icon: Edit3, label: "Editar perfil", description: "Atualize suas informações públicas" },
+  { icon: Lock, label: "Permissões e privacidade", description: "Controle quem pode encontrar você" },
+  { icon: UserX, label: "Perfis bloqueados", description: "Gerencie perfis que não deseja ver" },
+  { icon: Star, label: "Minha assinatura", description: "Veja os benefícios do VIP", vip: true },
 ];
 
 const security = [
-  { icon: Key, label: "Alterar senha" },
-  { icon: Mail, label: "Alterar email" },
-  { icon: Phone, label: "Alterar telefone" },
+  { icon: Key, label: "Alterar senha", description: "Mantenha sua conta protegida" },
+  { icon: Mail, label: "Alterar email", description: "Atualize seu endereço de acesso" },
+  { icon: Phone, label: "Alterar telefone", description: "Gerencie o telefone cadastrado" },
 ];
 
-const others = ["Contato com o suporte", "Termos de serviço", "Política de privacidade", "Blog"];
+const others = [
+  { icon: MessageCircle, label: "Contato com o suporte" },
+  { icon: FileText, label: "Termos de serviço" },
+  { icon: Shield, label: "Política de privacidade" },
+  { icon: Newspaper, label: "Blog" },
+];
 
-function SettingsRow({ icon: Icon, label, value, onClick, destructive }: SettingsRowProps) {
+function SettingsRow({ icon: Icon, label, description, value, onClick, destructive }: SettingsRowProps) {
   return (
     <Button
       type="button"
       variant="ghost"
       onClick={onClick}
       className={cn(
-        "h-14 w-full justify-start rounded-none px-4 text-sm hover:bg-surface-2 first:rounded-t-xl last:rounded-b-xl",
+        "min-h-14 w-full justify-start rounded-none px-4 py-3 text-sm hover:bg-surface-2 first:rounded-t-xl last:rounded-b-xl",
         destructive && "justify-center text-destructive hover:bg-destructive/10 hover:text-destructive",
       )}
     >
@@ -100,7 +110,10 @@ function SettingsRow({ icon: Icon, label, value, onClick, destructive }: Setting
           <Icon className="h-4 w-4" />
         </span>
       )}
-      <span className="min-w-0 flex-1 text-left">{label}</span>
+      <span className="min-w-0 flex-1 text-left">
+        <span className="block">{label}</span>
+        {description && <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{description}</span>}
+      </span>
       {!destructive && (
         <>
           {value && <span className="font-semibold text-foreground">{value}</span>}
@@ -140,7 +153,17 @@ function SettingsPage() {
         <div className="space-y-6">
           <SettingsSection title="Métricas da conta">
             {metrics.map((item) => (
-              <SettingsRow key={item.label} {...item} onClick={() => showPrototype(item.label)} />
+              <SettingsRow
+                key={item.label}
+                {...item}
+                onClick={() => {
+                  if (item.label === "Amigos e seguidores") {
+                    navigate({ to: "/configuracoes/amigos" });
+                    return;
+                  }
+                  showPrototype(item.label);
+                }}
+              />
             ))}
           </SettingsSection>
 
@@ -192,8 +215,8 @@ function SettingsPage() {
           </SettingsSection>
 
           <SettingsSection title="Outros">
-            {others.map((label) => (
-              <SettingsRow key={label} label={label} onClick={() => showPrototype(label)} />
+            {others.map((item) => (
+              <SettingsRow key={item.label} {...item} onClick={() => showPrototype(item.label)} />
             ))}
           </SettingsSection>
 
@@ -218,7 +241,7 @@ function SettingsPage() {
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent className="max-w-sm rounded-xl border-border bg-surface">
+              <AlertDialogContent className="max-h-[85vh] max-w-sm overflow-y-auto rounded-xl border-border bg-surface">
                 <AlertDialogHeader>
                   <AlertDialogTitle>Excluir sua conta?</AlertDialogTitle>
                   <AlertDialogDescription>
