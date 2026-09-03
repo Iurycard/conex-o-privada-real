@@ -54,7 +54,7 @@ const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
   const { profiles, posts, isFollowing, toggleFollow } = useProfiles();
-  const { isVip, openVipModal } = useVip();
+  const { isVip, openVipModal, registerLike, likesLeft } = useVip();
   const [expanded, setExpanded] = useState(false);
   const [lightbox, setLightbox] = useState<{ photos: number[]; index: number } | null>(null);
   const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
