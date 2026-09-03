@@ -5,8 +5,11 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 const benefits = [
+  "Chat privado — inicie um bate-papo privado com quem quiser",
+  "Preferência nas pesquisas — assinantes aparecem antes dos usuários free",
+  "Veja todos que visitaram o seu perfil",
+  "Curta perfis de forma ilimitada",
   "Vídeos liberados no feed e no chat",
-  "Iniciar conversas com qualquer perfil",
   "Zero anúncios em toda a plataforma",
   "Destaque dourado no feed e no Explorar",
 ];
