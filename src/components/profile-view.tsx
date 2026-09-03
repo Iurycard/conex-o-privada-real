@@ -118,6 +118,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         ) : (
           <button
             onClick={() => {
+              if (!registerLike()) {
+                toast("Limite de curtidas Free atingido — assine o VIP para curtir perfis sem limites.");
+                return;
+              }
               toggleFollow(profile.id);
               toast.success(following ? "Você deixou de seguir" : `Agora você segue ${profile.nick}`);
             }}
@@ -131,21 +135,22 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           </button>
         )}
 
-        <Link
-          to="/chat"
+        <button
+          onClick={() => (isVip || isOwner ? navigate({ to: "/chat" }) : openVipModal())}
           aria-label="Bate-papo"
           className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2"
         >
-          <MessageSquare className="h-5 w-5" />
-        </Link>
+          {isVip || isOwner ? <MessageSquare className="h-5 w-5" /> : <Lock className="h-5 w-5 text-gold" />}
+        </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger aria-label="Mais opções" className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2">
             <MoreVertical className="h-5 w-5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 border-border bg-surface">
-            <DropdownMenuItem onClick={() => navigate({ to: "/chat" })}>
-              <MessageSquare className="mr-2 h-4 w-4" /> Mensagem privada
+            <DropdownMenuItem onClick={() => (isVip ? navigate({ to: "/chat" }) : openVipModal())}>
+              {isVip ? <MessageSquare className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4 text-gold" />}
+              Mensagem privada {!isVip && <span className="ml-1 text-[10px] text-gold">VIP</span>}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => toast.success("Publicação no mural criada")}>
               <PenSquare className="mr-2 h-4 w-4" /> Postar no mural
