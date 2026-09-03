@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ChevronRight,
   Edit3,
@@ -137,10 +137,19 @@ function SettingsSection({ title, children }: { title: string; children: React.R
 
 function SettingsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { openVipModal } = useVip();
   const [darkMode, setDarkMode] = useState(true);
 
   const showPrototype = (label: string) => toast(`${label}: recurso em demonstração`);
+
+  if (location.pathname === "/configuracoes/amigos") {
+    return (
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -153,17 +162,15 @@ function SettingsPage() {
         <div className="space-y-6">
           <SettingsSection title="Métricas da conta">
             {metrics.map((item) => (
-              <SettingsRow
-                key={item.label}
-                {...item}
-                onClick={() => {
-                  if (item.label === "Amigos e seguidores") {
-                    navigate({ to: "/configuracoes/amigos" });
-                    return;
-                  }
-                  showPrototype(item.label);
-                }}
-              />
+              item.label === "Amigos e seguidores" ? (
+                <SettingsRow
+                  key={item.label}
+                  {...item}
+                  onClick={() => navigate({ to: "/configuracoes/amigos" })}
+                />
+              ) : (
+                <SettingsRow key={item.label} {...item} onClick={() => showPrototype(item.label)} />
+              )
             ))}
           </SettingsSection>
 
@@ -267,6 +274,7 @@ function SettingsPage() {
           <p>© 2026 Conexão Privada. Todos os direitos reservados.</p>
         </footer>
       </div>
+      <Outlet />
     </AppShell>
   );
 }
