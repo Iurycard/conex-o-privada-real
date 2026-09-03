@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { MapPin, Search, SlidersHorizontal, Plus } from "lucide-react";
+import { MapPin, Search, SlidersHorizontal, Plus, Crown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { MediaBlock, PageHeader, TypeBadge, VipBadge } from "@/components/bits";
 import { EventCard } from "@/components/event-card";
