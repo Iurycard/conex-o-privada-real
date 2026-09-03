@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { MapPin, Search, SlidersHorizontal, Plus } from "lucide-react";
+import { MapPin, Search, SlidersHorizontal, Plus, Crown } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { MediaBlock, PageHeader, TypeBadge, VipBadge } from "@/components/bits";
 import { EventCard } from "@/components/event-card";
@@ -48,16 +48,19 @@ function ExplorePage() {
   const [ageRange, setAgeRange] = useState<number[]>([18, 65]);
   const [lookingFor, setLookingFor] = useState<string>("Todos");
 
-  const list = profiles.filter(
-    (p) =>
-      (filter.length === 0 || filter.includes(p.type)) &&
-      (city === "Todas" || p.city === city) &&
-      (lookingFor === "Todos" || (p.lookingFor ?? []).includes(lookingFor as AccountType)) &&
-      p.nick.toLowerCase().includes(q.toLowerCase()) &&
-      p.distanceKm <= distance[0]! &&
-      p.age >= ageRange[0]! &&
-      p.age <= ageRange[1]!,
-  );
+  const list = profiles
+    .filter(
+      (p) =>
+        (filter.length === 0 || filter.includes(p.type)) &&
+        (city === "Todas" || p.city === city) &&
+        (lookingFor === "Todos" || (p.lookingFor ?? []).includes(lookingFor as AccountType)) &&
+        p.nick.toLowerCase().includes(q.toLowerCase()) &&
+        p.distanceKm <= distance[0]! &&
+        p.age >= ageRange[0]! &&
+        p.age <= ageRange[1]!,
+    )
+    // Regra VIP: assinantes têm preferência e aparecem antes dos perfis Free
+    .sort((a, b) => Number(b.vip) - Number(a.vip));
 
   const activeFilters =
     (filter.length > 0 ? 1 : 0) +
@@ -228,6 +231,10 @@ function ExplorePage() {
               </DialogContent>
             </Dialog>
           </div>
+
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Crown className="h-3 w-3 text-gold" /> Assinantes VIP aparecem primeiro nos resultados.
+          </p>
 
           <div className="mt-1 grid grid-cols-2 gap-3 pb-6 md:grid-cols-3">
             {list.map((p) => (

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Cake,
@@ -54,7 +54,7 @@ const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
   const { profiles, posts, isFollowing, toggleFollow } = useProfiles();
-  const { isVip, openVipModal } = useVip();
+  const { isVip, openVipModal, registerLike, likesLeft } = useVip();
   const [expanded, setExpanded] = useState(false);
   const [lightbox, setLightbox] = useState<{ photos: number[]; index: number } | null>(null);
   const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
@@ -118,6 +118,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         ) : (
           <button
             onClick={() => {
+              if (!registerLike()) {
+                toast("Limite de curtidas Free atingido — assine o VIP para curtir perfis sem limites.");
+                return;
+              }
               toggleFollow(profile.id);
               toast.success(following ? "Você deixou de seguir" : `Agora você segue ${profile.nick}`);
             }}
@@ -131,21 +135,22 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           </button>
         )}
 
-        <Link
-          to="/chat"
+        <button
+          onClick={() => (isVip || isOwner ? navigate({ to: "/chat" }) : openVipModal())}
           aria-label="Bate-papo"
           className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2"
         >
-          <MessageSquare className="h-5 w-5" />
-        </Link>
+          {isVip || isOwner ? <MessageSquare className="h-5 w-5" /> : <Lock className="h-5 w-5 text-gold" />}
+        </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger aria-label="Mais opções" className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2">
             <MoreVertical className="h-5 w-5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 border-border bg-surface">
-            <DropdownMenuItem onClick={() => navigate({ to: "/chat" })}>
-              <MessageSquare className="mr-2 h-4 w-4" /> Mensagem privada
+            <DropdownMenuItem onClick={() => (isVip ? navigate({ to: "/chat" }) : openVipModal())}>
+              {isVip ? <MessageSquare className="mr-2 h-4 w-4" /> : <Lock className="mr-2 h-4 w-4 text-gold" />}
+              Mensagem privada {!isVip && <span className="ml-1 text-[10px] text-gold">VIP</span>}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => toast.success("Publicação no mural criada")}>
               <PenSquare className="mr-2 h-4 w-4" /> Postar no mural
@@ -243,6 +248,49 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* QUEM VISITOU O SEU PERFIL — exclusivo VIP */}
+        {isOwner && (
+          <section className="mt-4 rounded-xl border border-gold/30 bg-surface p-3 text-left">
+            <div className="flex items-center justify-between gap-2">
+              <p className="inline-flex items-center gap-1.5 text-sm font-semibold">
+                <Crown className="h-4 w-4 text-gold" /> Quem visitou seu perfil
+              </p>
+              <span className="text-[11px] text-muted-foreground">{visitors.length} nas últimas 24h</span>
+            </div>
+            <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+              {visitors.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => (isVip ? navigate({ to: "/perfil/$id", params: { id: item.id } }) : openVipModal())}
+                  className="flex w-16 shrink-0 flex-col items-center gap-1"
+                >
+                  <span className={isVip ? "" : "blur-[6px]"}>
+                    <AvatarOrb profile={item} size={48} />
+                  </span>
+                  <span className={`w-full truncate text-center text-[11px] text-muted-foreground ${isVip ? "" : "blur-[4px]"}`}>
+                    {item.nick}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {!isVip && (
+              <button
+                onClick={openVipModal}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-gold py-2.5 text-xs font-semibold text-gold-foreground shadow-gold"
+              >
+                <Lock className="h-3.5 w-3.5" /> Ver todos que visitaram seu perfil com o VIP
+              </button>
+            )}
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {isVip
+                ? "Curtidas ilimitadas ativas e prioridade nas buscas."
+                : `Plano Free: ${likesLeft} curtida(s) restante(s) hoje.`}
+            </p>
+          </section>
+        )}
+
 
         {/* INFOS RÁPIDAS */}
         <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-left">

@@ -37,7 +37,7 @@ export const Route = createFileRoute("/feed")({
 function PostCard({ postId }: { postId: string }) {
   const post = posts.find((p) => p.id === postId)!;
   const author = profileById(post.authorId);
-  const { isVip, openVipModal } = useVip();
+  const { isVip, openVipModal, registerLike } = useVip();
   const [liked, setLiked] = useState(false);
   const navigate = useNavigate();
 
@@ -137,7 +137,17 @@ function PostCard({ postId }: { postId: string }) {
 
       <div className="flex items-center gap-5 px-4 py-3">
         <button
-          onClick={() => setLiked((v) => !v)}
+          onClick={() => {
+            if (liked) {
+              setLiked(false);
+              return;
+            }
+            if (!registerLike()) {
+              toast("Limite de curtidas do plano Free atingido — assine o VIP para curtir sem limites.");
+              return;
+            }
+            setLiked(true);
+          }}
           className={`flex items-center gap-1.5 text-sm ${liked ? "text-primary-glow" : "text-muted-foreground"}`}
         >
           <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />
