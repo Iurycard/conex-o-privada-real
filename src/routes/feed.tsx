@@ -37,7 +37,7 @@ export const Route = createFileRoute("/feed")({
 function PostCard({ postId }: { postId: string }) {
   const post = posts.find((p) => p.id === postId)!;
   const author = profileById(post.authorId);
-  const { isVip, openVipModal } = useVip();
+  const { isVip, openVipModal, registerLike } = useVip();
   const [liked, setLiked] = useState(false);
   const navigate = useNavigate();
 
