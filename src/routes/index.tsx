@@ -93,7 +93,7 @@ function Landing() {
       <header className="relative mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
         <div className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-primary shadow-neon">
-            <Shield className="h-4 w-4 text-primary-foreground" />
+
           </span>
           <span className="font-display text-sm font-semibold">
             Conexão <span className="text-primary-glow">Privada</span>

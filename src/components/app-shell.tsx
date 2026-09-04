@@ -17,6 +17,7 @@ import { useVip } from "@/context/vip";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import logoimg from "@/assets/logo.png";
 import {
   Dialog,
   DialogContent,
@@ -90,7 +91,11 @@ function Logo() {
   return (
     <Link to="/feed" className="flex items-center gap-2">
       <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-primary shadow-neon">
-        <Shield className="h-4 w-4 text-primary-foreground" />
+        <img
+        src={logoimg}
+        alt="logo"
+        className="h-full w-full object-cover"
+      />
       </span>
       <span className="hidden font-display text-sm font-semibold tracking-tight min-[381px]:inline">
         Conexão <span className="text-primary-glow">Privada</span>

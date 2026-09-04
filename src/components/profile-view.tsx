@@ -77,6 +77,12 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     [profile.id],
   );
 
+  const visitors = useMemo(
+    () => profiles.filter((item) => item.id !== profile.id).slice(0, 6),
+    [profiles, profile.id],
+  );
+  const likesLeft = useMemo(() => seeded(profile.id + "likes", 3, 12), [profile.id]);
+
   const timeline = useMemo(() => posts.filter((p) => p.authorId === profile.id), [posts, profile.id]);
   const connectionProfiles = useMemo(
     () => profiles.filter((item) => item.id !== profile.id),
