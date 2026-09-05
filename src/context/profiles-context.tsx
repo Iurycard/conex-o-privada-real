@@ -11,6 +11,7 @@ import {
   type Profile,
 } from "@/lib/mock-data";
 import { rowToProfile, type ProfileRow } from "@/lib/profile-mapping";
+import { clearPendingProfile, readPendingProfile } from "@/lib/pending-profile";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
