@@ -39,6 +39,7 @@ import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/context/profiles-context";
 import { useVip } from "@/context/vip";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
