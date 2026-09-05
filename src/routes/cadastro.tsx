@@ -202,19 +202,19 @@ function SignupPage() {
         </section>
 
         <button
-          onClick={() => {
-            if (!nick.trim()) {
-              toast.error("Escolha um apelido para o perfil");
-              return;
-            }
-            addProfile({ nick, type, city, bio, hue: 300, lookingFor });
-            toast.success("Perfil criado (protótipo)");
-            navigate({ to: "/feed" });
-          }}
-          className="mt-8 w-full rounded-full bg-gradient-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-neon"
+          onClick={() => void handleSubmit()}
+          disabled={busy}
+          className="mt-8 w-full rounded-full bg-gradient-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-neon disabled:opacity-60"
         >
-          Concluir cadastro
+          {busy ? "Criando…" : "Concluir cadastro"}
         </button>
+
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Já tem conta?{" "}
+          <Link to="/entrar" className="font-semibold text-primary-glow">
+            Entrar
+          </Link>
+        </p>
       </main>
     </div>
   );
