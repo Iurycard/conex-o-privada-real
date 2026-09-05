@@ -268,6 +268,12 @@ function SettingsPage() {
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate({ to: "/", replace: true });
+  };
+
+
   const publicAlbum = current.publicAlbum ?? [];
   const privateAlbum = current.privateAlbum ?? [];
   const albumCount = publicAlbum.length + privateAlbum.length;
