@@ -14,6 +14,7 @@ import {
 
 import heroImage from "@/assets/hero-landing.jpg";
 import phonesImage from "@/assets/app-phones.jpg";
+import logoImg from "@/assets/logo.png";
 import { AgeGate } from "@/components/age-gate";
 
 export const Route = createFileRoute("/")({
