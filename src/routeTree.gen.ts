@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as CadastroRouteImport } from './routes/cadastro'
+import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as SaidaRouteImport } from './routes/saida'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
@@ -39,6 +40,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const CadastroRoute = CadastroRouteImport.update({
   id: '/cadastro',
   path: '/cadastro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntrarRoute = EntrarRouteImport.update({
+  id: '/entrar',
+  path: '/entrar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SaidaRoute = SaidaRouteImport.update({
@@ -121,6 +127,7 @@ const AuthenticatedPerfilIdRoute = AuthenticatedPerfilIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
+  '/entrar': typeof EntrarRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/chat': typeof AuthenticatedChatRoute
@@ -139,6 +146,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
+  '/entrar': typeof EntrarRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/chat': typeof AuthenticatedChatRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/cadastro': typeof CadastroRoute
+  '/entrar': typeof EntrarRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
@@ -178,6 +187,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/cadastro'
+    | '/entrar'
     | '/saida'
     | '/sitemap.xml'
     | '/chat'
@@ -196,6 +206,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/cadastro'
+    | '/entrar'
     | '/saida'
     | '/sitemap.xml'
     | '/chat'
@@ -214,6 +225,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/cadastro'
+    | '/entrar'
     | '/saida'
     | '/sitemap.xml'
     | '/_authenticated/chat'
@@ -234,6 +246,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   CadastroRoute: typeof CadastroRoute
+  EntrarRoute: typeof EntrarRoute
   SaidaRoute: typeof SaidaRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
 }
@@ -259,6 +272,13 @@ declare module '@tanstack/react-router' {
       path: '/cadastro'
       fullPath: '/cadastro'
       preLoaderRoute: typeof CadastroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entrar': {
+      id: '/entrar'
+      path: '/entrar'
+      fullPath: '/entrar'
+      preLoaderRoute: typeof EntrarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/saida': {
@@ -422,6 +442,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   CadastroRoute: CadastroRoute,
+  EntrarRoute: EntrarRoute,
   SaidaRoute: SaidaRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
 }
