@@ -178,7 +178,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           patchDbProfile(currentId, { [key]: photos } as Partial<Profile>);
           void supabase
             .from("profiles")
-            .update({ [album === "public" ? "public_album" : "private_album"]: photos })
+            .update(album === "public" ? { public_album: photos } : { private_album: photos })
             .eq("id", user.id);
           return;
         }
