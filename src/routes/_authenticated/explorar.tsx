@@ -20,7 +20,7 @@ import {
 import { toast } from "sonner";
 import { useVip } from "@/context/vip";
 
-export const Route = createFileRoute("/explorar")({
+export const Route = createFileRoute("/_authenticated/explorar")({
   head: () => ({
     meta: [
       { title: "Explorar perfis e eventos — Conexão Privada" },

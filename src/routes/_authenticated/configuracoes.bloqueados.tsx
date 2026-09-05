@@ -5,7 +5,7 @@ import { AvatarOrb, VipBadge } from "@/components/bits";
 import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/context/profiles-context";
 
-export const Route = createFileRoute("/configuracoes/bloqueados")({
+export const Route = createFileRoute("/_authenticated/configuracoes/bloqueados")({
   head: () => ({
     meta: [
       { title: "Perfis bloqueados — Conexão Privada" },

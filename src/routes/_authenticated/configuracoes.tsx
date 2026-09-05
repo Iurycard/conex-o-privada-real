@@ -40,7 +40,7 @@ import { useProfiles } from "@/context/profiles-context";
 import { useVip } from "@/context/vip";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/configuracoes")({
+export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
     meta: [
       { title: "Configurações — Conexão Privada" },

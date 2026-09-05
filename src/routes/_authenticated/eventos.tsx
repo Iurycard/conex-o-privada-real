@@ -17,7 +17,7 @@ const covers: Record<string, string> = {
   e4: coverDourado,
 };
 
-export const Route = createFileRoute("/eventos")({
+export const Route = createFileRoute("/_authenticated/eventos")({
   head: () => ({
     meta: [
       { title: "Eventos & Baladas — Conexão Privada" },

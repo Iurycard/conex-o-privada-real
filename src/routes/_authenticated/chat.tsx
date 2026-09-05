@@ -7,7 +7,7 @@ import { conversations, messages, profileById } from "@/lib/mock-data";
 import { useVip } from "@/context/vip";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/chat")({
+export const Route = createFileRoute("/_authenticated/chat")({
   head: () => ({
     meta: [
       { title: "Chat — Conexão Privada" },

@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { AvatarOrb, PageHeader } from "@/components/bits";
 import { useProfiles } from "@/context/profiles-context";
 
-export const Route = createFileRoute("/notificacoes")({
+export const Route = createFileRoute("/_authenticated/notificacoes")({
   head: () => ({
     meta: [
       { title: "Notificações — Conexão Privada" },
