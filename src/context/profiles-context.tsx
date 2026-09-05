@@ -58,6 +58,28 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       setDbProfiles([]);
       return;
     }
+
+    const pending = readPendingProfile();
+    if (pending) {
+      const { data: mine } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
+      if (!mine) {
+        await supabase.from("profiles").insert({
+          id: user.id,
+          nick: pending.nick,
+          type: pending.type,
+          city: pending.city,
+          bio: pending.bio,
+          hue: pending.hue,
+          avatar: randomAvatar(),
+          cover: randomCover(),
+          looking_for: pending.lookingFor,
+          public_album: randomPublicAlbum(),
+          private_album: randomPrivateAlbum(),
+        });
+      }
+      clearPendingProfile();
+    }
+
     const { data } = await supabase
       .from("profiles")
       .select("*")
