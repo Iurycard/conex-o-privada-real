@@ -5,7 +5,7 @@ import { AvatarOrb, PageHeader, VipBadge } from "@/components/bits";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProfiles } from "@/context/profiles-context";
 
-export const Route = createFileRoute("/configuracoes/amigos")({
+export const Route = createFileRoute("/_authenticated/configuracoes/amigos")({
   head: () => ({
     meta: [
       { title: "Amigos e seguidores — Conexão Privada" },

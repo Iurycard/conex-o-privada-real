@@ -3,6 +3,9 @@ import { useState } from "react";
 import { ArrowLeft, ImagePlus, MapPin, ShieldCheck } from "lucide-react";
 import { accountTypes, type AccountType } from "@/lib/mock-data";
 import { useProfiles } from "@/context/profiles-context";
+import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
+import { savePendingProfile } from "@/lib/pending-profile";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -25,14 +28,73 @@ export const Route = createFileRoute("/cadastro")({
 function SignupPage() {
   const [type, setType] = useState<AccountType>("Casal (Ele/Ela)");
   const [nick, setNick] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [city, setCity] = useState("");
   const [bio, setBio] = useState("");
   const [lookingFor, setLookingFor] = useState<AccountType[]>([]);
+  const [busy, setBusy] = useState(false);
   const { addProfile } = useProfiles();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const toggleLooking = (t: AccountType) =>
     setLookingFor((list) => (list.includes(t) ? list.filter((x) => x !== t) : [...list, t]));
+
+  const handleSubmit = async () => {
+    if (!nick.trim()) {
+      toast.error("Escolha um apelido para o perfil");
+      return;
+    }
+
+    if (user) {
+      setBusy(true);
+      try {
+        await addProfile({ nick, type, city, bio, hue: 300, lookingFor });
+        toast.success("Perfil criado");
+        navigate({ to: "/feed" });
+      } catch {
+        toast.error("Não foi possível salvar o perfil");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (!email.trim() || password.length < 6) {
+      toast.error("Informe um e-mail e uma senha com pelo menos 6 caracteres");
+      return;
+    }
+
+    setBusy(true);
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/entrar` },
+    });
+    setBusy(false);
+
+    if (error) {
+      toast.error(
+        error.message.includes("already registered")
+          ? "Este e-mail já tem conta. Faça login."
+          : "Não foi possível criar a conta. Tente novamente.",
+      );
+      return;
+    }
+
+    savePendingProfile({ nick: nick.trim(), type, city: city.trim(), bio: bio.trim(), hue: 300, lookingFor });
+
+    if (data.session) {
+      toast.success("Conta criada");
+      navigate({ to: "/feed" });
+      return;
+    }
+
+    toast.success("Confirme seu e-mail para ativar a conta");
+    navigate({ to: "/entrar" });
+  };
+
 
 
   return (
@@ -74,6 +136,21 @@ function SignupPage() {
             <Label htmlFor="nick" className="text-sm">Apelido do perfil</Label>
             <Input id="nick" value={nick} onChange={(e) => setNick(e.target.value)} placeholder="Ex.: L&M" className="mt-2 border-border bg-surface" />
           </div>
+
+          {!user && (
+            <>
+              <div>
+                <Label htmlFor="email" className="text-sm">E-mail</Label>
+                <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" className="mt-2 border-border bg-surface" />
+              </div>
+              <div>
+                <Label htmlFor="password" className="text-sm">Senha</Label>
+                <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" className="mt-2 border-border bg-surface" />
+              </div>
+            </>
+          )}
+
+
 
           <div>
             <Label htmlFor="loc" className="text-sm">Localização</Label>
@@ -143,19 +220,19 @@ function SignupPage() {
         </section>
 
         <button
-          onClick={() => {
-            if (!nick.trim()) {
-              toast.error("Escolha um apelido para o perfil");
-              return;
-            }
-            addProfile({ nick, type, city, bio, hue: 300, lookingFor });
-            toast.success("Perfil criado (protótipo)");
-            navigate({ to: "/feed" });
-          }}
-          className="mt-8 w-full rounded-full bg-gradient-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-neon"
+          onClick={() => void handleSubmit()}
+          disabled={busy}
+          className="mt-8 w-full rounded-full bg-gradient-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-neon disabled:opacity-60"
         >
-          Concluir cadastro
+          {busy ? "Criando…" : "Concluir cadastro"}
         </button>
+
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Já tem conta?{" "}
+          <Link to="/entrar" className="font-semibold text-primary-glow">
+            Entrar
+          </Link>
+        </p>
       </main>
     </div>
   );

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/context/profiles-context";
 import { accountTypes, type AccountType } from "@/lib/mock-data";
 
-export const Route = createFileRoute("/editar-perfil")({
+export const Route = createFileRoute("/_authenticated/editar-perfil")({
   head: () => ({
     meta: [
       { title: "Editar perfil — Conexão Privada" },

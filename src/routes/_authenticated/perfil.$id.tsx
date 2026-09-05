@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { ProfileView } from "@/components/profile-view";
 import { useProfiles } from "@/context/profiles-context";
 
-export const Route = createFileRoute("/perfil/$id")({
+export const Route = createFileRoute("/_authenticated/perfil/$id")({
   head: () => ({
     meta: [
       { title: "Perfil da comunidade — Conexão Privada" },

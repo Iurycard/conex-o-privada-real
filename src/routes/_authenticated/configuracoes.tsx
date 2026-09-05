@@ -39,8 +39,9 @@ import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/context/profiles-context";
 import { useVip } from "@/context/vip";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/configuracoes")({
+export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
     meta: [
       { title: "Configurações — Conexão Privada" },
@@ -268,6 +269,12 @@ function SettingsPage() {
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate({ to: "/", replace: true });
+  };
+
+
   const publicAlbum = current.publicAlbum ?? [];
   const privateAlbum = current.privateAlbum ?? [];
   const albumCount = publicAlbum.length + privateAlbum.length;
@@ -395,7 +402,7 @@ function SettingsPage() {
 
           <section aria-label="Ações da conta" className="space-y-3">
             <div className="overflow-hidden rounded-xl border border-destructive/25 bg-surface">
-              <SettingsRow label="Sair" destructive onClick={() => navigate({ to: "/" })} />
+              <SettingsRow label="Sair" destructive onClick={() => void handleSignOut()} />
             </div>
 
             <AlertDialog>

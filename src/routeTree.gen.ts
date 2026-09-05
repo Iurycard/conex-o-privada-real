@@ -10,25 +10,31 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as CadastroRouteImport } from './routes/cadastro'
-import { Route as ChatRouteImport } from './routes/chat'
-import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
-import { Route as EditarPerfilRouteImport } from './routes/editar-perfil'
-import { Route as EventosRouteImport } from './routes/eventos'
-import { Route as ExplorarRouteImport } from './routes/explorar'
-import { Route as FeedRouteImport } from './routes/feed'
-import { Route as NotificacoesRouteImport } from './routes/notificacoes'
-import { Route as PerfilRouteImport } from './routes/perfil'
+import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as SaidaRouteImport } from './routes/saida'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
-import { Route as ConfiguracoesAmigosRouteImport } from './routes/configuracoes.amigos'
-import { Route as ConfiguracoesBloqueadosRouteImport } from './routes/configuracoes.bloqueados'
-import { Route as PerfilIndexRouteImport } from './routes/perfil.index'
-import { Route as PerfilIdRouteImport } from './routes/perfil.$id'
+import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
+import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
+import { Route as AuthenticatedEditarPerfilRouteImport } from './routes/_authenticated/editar-perfil'
+import { Route as AuthenticatedEventosRouteImport } from './routes/_authenticated/eventos'
+import { Route as AuthenticatedExplorarRouteImport } from './routes/_authenticated/explorar'
+import { Route as AuthenticatedFeedRouteImport } from './routes/_authenticated/feed'
+import { Route as AuthenticatedNotificacoesRouteImport } from './routes/_authenticated/notificacoes'
+import { Route as AuthenticatedPerfilRouteImport } from './routes/_authenticated/perfil'
+import { Route as AuthenticatedConfiguracoesAmigosRouteImport } from './routes/_authenticated/configuracoes.amigos'
+import { Route as AuthenticatedConfiguracoesBloqueadosRouteImport } from './routes/_authenticated/configuracoes.bloqueados'
+import { Route as AuthenticatedPerfilIndexRouteImport } from './routes/_authenticated/perfil.index'
+import { Route as AuthenticatedPerfilIdRouteImport } from './routes/_authenticated/perfil.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CadastroRoute = CadastroRouteImport.update({
@@ -36,44 +42,9 @@ const CadastroRoute = CadastroRouteImport.update({
   path: '/cadastro',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ChatRoute = ChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
-  id: '/configuracoes',
-  path: '/configuracoes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EditarPerfilRoute = EditarPerfilRouteImport.update({
-  id: '/editar-perfil',
-  path: '/editar-perfil',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EventosRoute = EventosRouteImport.update({
-  id: '/eventos',
-  path: '/eventos',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ExplorarRoute = ExplorarRouteImport.update({
-  id: '/explorar',
-  path: '/explorar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FeedRoute = FeedRouteImport.update({
-  id: '/feed',
-  path: '/feed',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const NotificacoesRoute = NotificacoesRouteImport.update({
-  id: '/notificacoes',
-  path: '/notificacoes',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PerfilRoute = PerfilRouteImport.update({
-  id: '/perfil',
-  path: '/perfil',
+const EntrarRoute = EntrarRouteImport.update({
+  id: '/entrar',
+  path: '/entrar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SaidaRoute = SaidaRouteImport.update({
@@ -86,86 +57,139 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ConfiguracoesAmigosRoute = ConfiguracoesAmigosRouteImport.update({
-  id: '/amigos',
-  path: '/amigos',
-  getParentRoute: () => ConfiguracoesRoute,
+const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ConfiguracoesBloqueadosRoute = ConfiguracoesBloqueadosRouteImport.update({
-  id: '/bloqueados',
-  path: '/bloqueados',
-  getParentRoute: () => ConfiguracoesRoute,
+const AuthenticatedConfiguracoesRoute =
+  AuthenticatedConfiguracoesRouteImport.update({
+    id: '/configuracoes',
+    path: '/configuracoes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEditarPerfilRoute =
+  AuthenticatedEditarPerfilRouteImport.update({
+    id: '/editar-perfil',
+    path: '/editar-perfil',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedEventosRoute = AuthenticatedEventosRouteImport.update({
+  id: '/eventos',
+  path: '/eventos',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const PerfilIndexRoute = PerfilIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => PerfilRoute,
+const AuthenticatedExplorarRoute = AuthenticatedExplorarRouteImport.update({
+  id: '/explorar',
+  path: '/explorar',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const PerfilIdRoute = PerfilIdRouteImport.update({
+const AuthenticatedFeedRoute = AuthenticatedFeedRouteImport.update({
+  id: '/feed',
+  path: '/feed',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedNotificacoesRoute =
+  AuthenticatedNotificacoesRouteImport.update({
+    id: '/notificacoes',
+    path: '/notificacoes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPerfilRoute = AuthenticatedPerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedConfiguracoesAmigosRoute =
+  AuthenticatedConfiguracoesAmigosRouteImport.update({
+    id: '/amigos',
+    path: '/amigos',
+    getParentRoute: () => AuthenticatedConfiguracoesRoute,
+  } as any)
+const AuthenticatedConfiguracoesBloqueadosRoute =
+  AuthenticatedConfiguracoesBloqueadosRouteImport.update({
+    id: '/bloqueados',
+    path: '/bloqueados',
+    getParentRoute: () => AuthenticatedConfiguracoesRoute,
+  } as any)
+const AuthenticatedPerfilIndexRoute =
+  AuthenticatedPerfilIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedPerfilRoute,
+  } as any)
+const AuthenticatedPerfilIdRoute = AuthenticatedPerfilIdRouteImport.update({
   id: '/$id',
   path: '/$id',
-  getParentRoute: () => PerfilRoute,
+  getParentRoute: () => AuthenticatedPerfilRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
-  '/chat': typeof ChatRoute
-  '/configuracoes': typeof ConfiguracoesRouteWithChildren
-  '/editar-perfil': typeof EditarPerfilRoute
-  '/eventos': typeof EventosRoute
-  '/explorar': typeof ExplorarRoute
-  '/feed': typeof FeedRoute
-  '/notificacoes': typeof NotificacoesRoute
-  '/perfil': typeof PerfilRouteWithChildren
+  '/entrar': typeof EntrarRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/configuracoes/amigos': typeof ConfiguracoesAmigosRoute
-  '/configuracoes/bloqueados': typeof ConfiguracoesBloqueadosRoute
-  '/perfil/$id': typeof PerfilIdRoute
-  '/perfil/': typeof PerfilIndexRoute
+  '/chat': typeof AuthenticatedChatRoute
+  '/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
+  '/editar-perfil': typeof AuthenticatedEditarPerfilRoute
+  '/eventos': typeof AuthenticatedEventosRoute
+  '/explorar': typeof AuthenticatedExplorarRoute
+  '/feed': typeof AuthenticatedFeedRoute
+  '/notificacoes': typeof AuthenticatedNotificacoesRoute
+  '/perfil': typeof AuthenticatedPerfilRouteWithChildren
+  '/configuracoes/amigos': typeof AuthenticatedConfiguracoesAmigosRoute
+  '/configuracoes/bloqueados': typeof AuthenticatedConfiguracoesBloqueadosRoute
+  '/perfil/$id': typeof AuthenticatedPerfilIdRoute
+  '/perfil/': typeof AuthenticatedPerfilIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
-  '/chat': typeof ChatRoute
-  '/configuracoes': typeof ConfiguracoesRouteWithChildren
-  '/editar-perfil': typeof EditarPerfilRoute
-  '/eventos': typeof EventosRoute
-  '/explorar': typeof ExplorarRoute
-  '/feed': typeof FeedRoute
-  '/notificacoes': typeof NotificacoesRoute
+  '/entrar': typeof EntrarRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/configuracoes/amigos': typeof ConfiguracoesAmigosRoute
-  '/configuracoes/bloqueados': typeof ConfiguracoesBloqueadosRoute
-  '/perfil/$id': typeof PerfilIdRoute
-  '/perfil': typeof PerfilIndexRoute
+  '/chat': typeof AuthenticatedChatRoute
+  '/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
+  '/editar-perfil': typeof AuthenticatedEditarPerfilRoute
+  '/eventos': typeof AuthenticatedEventosRoute
+  '/explorar': typeof AuthenticatedExplorarRoute
+  '/feed': typeof AuthenticatedFeedRoute
+  '/notificacoes': typeof AuthenticatedNotificacoesRoute
+  '/configuracoes/amigos': typeof AuthenticatedConfiguracoesAmigosRoute
+  '/configuracoes/bloqueados': typeof AuthenticatedConfiguracoesBloqueadosRoute
+  '/perfil/$id': typeof AuthenticatedPerfilIdRoute
+  '/perfil': typeof AuthenticatedPerfilIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/cadastro': typeof CadastroRoute
-  '/chat': typeof ChatRoute
-  '/configuracoes': typeof ConfiguracoesRouteWithChildren
-  '/editar-perfil': typeof EditarPerfilRoute
-  '/eventos': typeof EventosRoute
-  '/explorar': typeof ExplorarRoute
-  '/feed': typeof FeedRoute
-  '/notificacoes': typeof NotificacoesRoute
-  '/perfil': typeof PerfilRouteWithChildren
+  '/entrar': typeof EntrarRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/configuracoes/amigos': typeof ConfiguracoesAmigosRoute
-  '/configuracoes/bloqueados': typeof ConfiguracoesBloqueadosRoute
-  '/perfil/$id': typeof PerfilIdRoute
-  '/perfil/': typeof PerfilIndexRoute
+  '/_authenticated/chat': typeof AuthenticatedChatRoute
+  '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
+  '/_authenticated/editar-perfil': typeof AuthenticatedEditarPerfilRoute
+  '/_authenticated/eventos': typeof AuthenticatedEventosRoute
+  '/_authenticated/explorar': typeof AuthenticatedExplorarRoute
+  '/_authenticated/feed': typeof AuthenticatedFeedRoute
+  '/_authenticated/notificacoes': typeof AuthenticatedNotificacoesRoute
+  '/_authenticated/perfil': typeof AuthenticatedPerfilRouteWithChildren
+  '/_authenticated/configuracoes/amigos': typeof AuthenticatedConfiguracoesAmigosRoute
+  '/_authenticated/configuracoes/bloqueados': typeof AuthenticatedConfiguracoesBloqueadosRoute
+  '/_authenticated/perfil/$id': typeof AuthenticatedPerfilIdRoute
+  '/_authenticated/perfil/': typeof AuthenticatedPerfilIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/cadastro'
+    | '/entrar'
+    | '/saida'
+    | '/sitemap.xml'
     | '/chat'
     | '/configuracoes'
     | '/editar-perfil'
@@ -174,8 +198,6 @@ export interface FileRouteTypes {
     | '/feed'
     | '/notificacoes'
     | '/perfil'
-    | '/saida'
-    | '/sitemap.xml'
     | '/configuracoes/amigos'
     | '/configuracoes/bloqueados'
     | '/perfil/$id'
@@ -184,6 +206,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/cadastro'
+    | '/entrar'
+    | '/saida'
+    | '/sitemap.xml'
     | '/chat'
     | '/configuracoes'
     | '/editar-perfil'
@@ -191,8 +216,6 @@ export interface FileRouteTypes {
     | '/explorar'
     | '/feed'
     | '/notificacoes'
-    | '/saida'
-    | '/sitemap.xml'
     | '/configuracoes/amigos'
     | '/configuracoes/bloqueados'
     | '/perfil/$id'
@@ -200,34 +223,30 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/_authenticated'
     | '/cadastro'
-    | '/chat'
-    | '/configuracoes'
-    | '/editar-perfil'
-    | '/eventos'
-    | '/explorar'
-    | '/feed'
-    | '/notificacoes'
-    | '/perfil'
+    | '/entrar'
     | '/saida'
     | '/sitemap.xml'
-    | '/configuracoes/amigos'
-    | '/configuracoes/bloqueados'
-    | '/perfil/$id'
-    | '/perfil/'
+    | '/_authenticated/chat'
+    | '/_authenticated/configuracoes'
+    | '/_authenticated/editar-perfil'
+    | '/_authenticated/eventos'
+    | '/_authenticated/explorar'
+    | '/_authenticated/feed'
+    | '/_authenticated/notificacoes'
+    | '/_authenticated/perfil'
+    | '/_authenticated/configuracoes/amigos'
+    | '/_authenticated/configuracoes/bloqueados'
+    | '/_authenticated/perfil/$id'
+    | '/_authenticated/perfil/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   CadastroRoute: typeof CadastroRoute
-  ChatRoute: typeof ChatRoute
-  ConfiguracoesRoute: typeof ConfiguracoesRouteWithChildren
-  EditarPerfilRoute: typeof EditarPerfilRoute
-  EventosRoute: typeof EventosRoute
-  ExplorarRoute: typeof ExplorarRoute
-  FeedRoute: typeof FeedRoute
-  NotificacoesRoute: typeof NotificacoesRoute
-  PerfilRoute: typeof PerfilRouteWithChildren
+  EntrarRoute: typeof EntrarRoute
   SaidaRoute: typeof SaidaRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
 }
@@ -241,6 +260,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cadastro': {
       id: '/cadastro'
       path: '/cadastro'
@@ -248,60 +274,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CadastroRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/chat': {
-      id: '/chat'
-      path: '/chat'
-      fullPath: '/chat'
-      preLoaderRoute: typeof ChatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/configuracoes': {
-      id: '/configuracoes'
-      path: '/configuracoes'
-      fullPath: '/configuracoes'
-      preLoaderRoute: typeof ConfiguracoesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/editar-perfil': {
-      id: '/editar-perfil'
-      path: '/editar-perfil'
-      fullPath: '/editar-perfil'
-      preLoaderRoute: typeof EditarPerfilRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/eventos': {
-      id: '/eventos'
-      path: '/eventos'
-      fullPath: '/eventos'
-      preLoaderRoute: typeof EventosRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/explorar': {
-      id: '/explorar'
-      path: '/explorar'
-      fullPath: '/explorar'
-      preLoaderRoute: typeof ExplorarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/feed': {
-      id: '/feed'
-      path: '/feed'
-      fullPath: '/feed'
-      preLoaderRoute: typeof FeedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/notificacoes': {
-      id: '/notificacoes'
-      path: '/notificacoes'
-      fullPath: '/notificacoes'
-      preLoaderRoute: typeof NotificacoesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/perfil': {
-      id: '/perfil'
-      path: '/perfil'
-      fullPath: '/perfil'
-      preLoaderRoute: typeof PerfilRouteImport
+    '/entrar': {
+      id: '/entrar'
+      path: '/entrar'
+      fullPath: '/entrar'
+      preLoaderRoute: typeof EntrarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/saida': {
@@ -318,75 +295,154 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/configuracoes/amigos': {
-      id: '/configuracoes/amigos'
+    '/_authenticated/chat': {
+      id: '/_authenticated/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof AuthenticatedChatRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/configuracoes': {
+      id: '/_authenticated/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof AuthenticatedConfiguracoesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/editar-perfil': {
+      id: '/_authenticated/editar-perfil'
+      path: '/editar-perfil'
+      fullPath: '/editar-perfil'
+      preLoaderRoute: typeof AuthenticatedEditarPerfilRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/eventos': {
+      id: '/_authenticated/eventos'
+      path: '/eventos'
+      fullPath: '/eventos'
+      preLoaderRoute: typeof AuthenticatedEventosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/explorar': {
+      id: '/_authenticated/explorar'
+      path: '/explorar'
+      fullPath: '/explorar'
+      preLoaderRoute: typeof AuthenticatedExplorarRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/feed': {
+      id: '/_authenticated/feed'
+      path: '/feed'
+      fullPath: '/feed'
+      preLoaderRoute: typeof AuthenticatedFeedRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/notificacoes': {
+      id: '/_authenticated/notificacoes'
+      path: '/notificacoes'
+      fullPath: '/notificacoes'
+      preLoaderRoute: typeof AuthenticatedNotificacoesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/perfil': {
+      id: '/_authenticated/perfil'
+      path: '/perfil'
+      fullPath: '/perfil'
+      preLoaderRoute: typeof AuthenticatedPerfilRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/configuracoes/amigos': {
+      id: '/_authenticated/configuracoes/amigos'
       path: '/amigos'
       fullPath: '/configuracoes/amigos'
-      preLoaderRoute: typeof ConfiguracoesAmigosRouteImport
-      parentRoute: typeof ConfiguracoesRoute
+      preLoaderRoute: typeof AuthenticatedConfiguracoesAmigosRouteImport
+      parentRoute: typeof AuthenticatedConfiguracoesRoute
     }
-    '/configuracoes/bloqueados': {
-      id: '/configuracoes/bloqueados'
+    '/_authenticated/configuracoes/bloqueados': {
+      id: '/_authenticated/configuracoes/bloqueados'
       path: '/bloqueados'
       fullPath: '/configuracoes/bloqueados'
-      preLoaderRoute: typeof ConfiguracoesBloqueadosRouteImport
-      parentRoute: typeof ConfiguracoesRoute
+      preLoaderRoute: typeof AuthenticatedConfiguracoesBloqueadosRouteImport
+      parentRoute: typeof AuthenticatedConfiguracoesRoute
     }
-    '/perfil/': {
-      id: '/perfil/'
+    '/_authenticated/perfil/': {
+      id: '/_authenticated/perfil/'
       path: '/'
       fullPath: '/perfil/'
-      preLoaderRoute: typeof PerfilIndexRouteImport
-      parentRoute: typeof PerfilRoute
+      preLoaderRoute: typeof AuthenticatedPerfilIndexRouteImport
+      parentRoute: typeof AuthenticatedPerfilRoute
     }
-    '/perfil/$id': {
-      id: '/perfil/$id'
+    '/_authenticated/perfil/$id': {
+      id: '/_authenticated/perfil/$id'
       path: '/$id'
       fullPath: '/perfil/$id'
-      preLoaderRoute: typeof PerfilIdRouteImport
-      parentRoute: typeof PerfilRoute
+      preLoaderRoute: typeof AuthenticatedPerfilIdRouteImport
+      parentRoute: typeof AuthenticatedPerfilRoute
     }
   }
 }
 
-interface ConfiguracoesRouteChildren {
-  ConfiguracoesAmigosRoute: typeof ConfiguracoesAmigosRoute
-  ConfiguracoesBloqueadosRoute: typeof ConfiguracoesBloqueadosRoute
+interface AuthenticatedConfiguracoesRouteChildren {
+  AuthenticatedConfiguracoesAmigosRoute: typeof AuthenticatedConfiguracoesAmigosRoute
+  AuthenticatedConfiguracoesBloqueadosRoute: typeof AuthenticatedConfiguracoesBloqueadosRoute
 }
 
-const ConfiguracoesRouteChildren: ConfiguracoesRouteChildren = {
-  ConfiguracoesAmigosRoute: ConfiguracoesAmigosRoute,
-  ConfiguracoesBloqueadosRoute: ConfiguracoesBloqueadosRoute,
+const AuthenticatedConfiguracoesRouteChildren: AuthenticatedConfiguracoesRouteChildren =
+  {
+    AuthenticatedConfiguracoesAmigosRoute:
+      AuthenticatedConfiguracoesAmigosRoute,
+    AuthenticatedConfiguracoesBloqueadosRoute:
+      AuthenticatedConfiguracoesBloqueadosRoute,
+  }
+
+const AuthenticatedConfiguracoesRouteWithChildren =
+  AuthenticatedConfiguracoesRoute._addFileChildren(
+    AuthenticatedConfiguracoesRouteChildren,
+  )
+
+interface AuthenticatedPerfilRouteChildren {
+  AuthenticatedPerfilIdRoute: typeof AuthenticatedPerfilIdRoute
+  AuthenticatedPerfilIndexRoute: typeof AuthenticatedPerfilIndexRoute
 }
 
-const ConfiguracoesRouteWithChildren = ConfiguracoesRoute._addFileChildren(
-  ConfiguracoesRouteChildren,
-)
-
-interface PerfilRouteChildren {
-  PerfilIdRoute: typeof PerfilIdRoute
-  PerfilIndexRoute: typeof PerfilIndexRoute
+const AuthenticatedPerfilRouteChildren: AuthenticatedPerfilRouteChildren = {
+  AuthenticatedPerfilIdRoute: AuthenticatedPerfilIdRoute,
+  AuthenticatedPerfilIndexRoute: AuthenticatedPerfilIndexRoute,
 }
 
-const PerfilRouteChildren: PerfilRouteChildren = {
-  PerfilIdRoute: PerfilIdRoute,
-  PerfilIndexRoute: PerfilIndexRoute,
+const AuthenticatedPerfilRouteWithChildren =
+  AuthenticatedPerfilRoute._addFileChildren(AuthenticatedPerfilRouteChildren)
+
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedChatRoute: typeof AuthenticatedChatRoute
+  AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRouteWithChildren
+  AuthenticatedEditarPerfilRoute: typeof AuthenticatedEditarPerfilRoute
+  AuthenticatedEventosRoute: typeof AuthenticatedEventosRoute
+  AuthenticatedExplorarRoute: typeof AuthenticatedExplorarRoute
+  AuthenticatedFeedRoute: typeof AuthenticatedFeedRoute
+  AuthenticatedNotificacoesRoute: typeof AuthenticatedNotificacoesRoute
+  AuthenticatedPerfilRoute: typeof AuthenticatedPerfilRouteWithChildren
 }
 
-const PerfilRouteWithChildren =
-  PerfilRoute._addFileChildren(PerfilRouteChildren)
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedChatRoute: AuthenticatedChatRoute,
+  AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRouteWithChildren,
+  AuthenticatedEditarPerfilRoute: AuthenticatedEditarPerfilRoute,
+  AuthenticatedEventosRoute: AuthenticatedEventosRoute,
+  AuthenticatedExplorarRoute: AuthenticatedExplorarRoute,
+  AuthenticatedFeedRoute: AuthenticatedFeedRoute,
+  AuthenticatedNotificacoesRoute: AuthenticatedNotificacoesRoute,
+  AuthenticatedPerfilRoute: AuthenticatedPerfilRouteWithChildren,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   CadastroRoute: CadastroRoute,
-  ChatRoute: ChatRoute,
-  ConfiguracoesRoute: ConfiguracoesRouteWithChildren,
-  EditarPerfilRoute: EditarPerfilRoute,
-  EventosRoute: EventosRoute,
-  ExplorarRoute: ExplorarRoute,
-  FeedRoute: FeedRoute,
-  NotificacoesRoute: NotificacoesRoute,
-  PerfilRoute: PerfilRouteWithChildren,
+  EntrarRoute: EntrarRoute,
   SaidaRoute: SaidaRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
 }
