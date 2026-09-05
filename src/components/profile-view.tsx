@@ -141,20 +141,14 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           </button>
         )}
 
-        <Link
-          to={isVip ? "/chat" : "/perfil/$id"}
-          params={isVip ? undefined : { id: profile.id }}
-          onClick={(event) => {
-            if (!isVip) {
-              event.preventDefault();
-              openVipModal();
-            }
-          }}
+        <button
+          type="button"
+          onClick={() => (isVip ? navigate({ to: "/chat" }) : openVipModal())}
           aria-label="Bate-papo"
           className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2"
         >
           {isVip || isOwner ? <MessageSquare className="h-5 w-5" /> : <Lock className="h-5 w-5 text-gold" />}
-        </Link>
+        </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger aria-label="Mais opções" className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2">
