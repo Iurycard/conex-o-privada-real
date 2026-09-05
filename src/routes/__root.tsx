@@ -129,14 +129,16 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <VipProvider>
-        <ProfilesProvider>
-          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-          <Outlet />
-          <VipModal />
-          <Toaster position="top-center" />
-        </ProfilesProvider>
-      </VipProvider>
+      <AuthProvider>
+        <VipProvider>
+          <ProfilesProvider>
+            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+            <Outlet />
+            <VipModal />
+            <Toaster position="top-center" />
+          </ProfilesProvider>
+        </VipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
