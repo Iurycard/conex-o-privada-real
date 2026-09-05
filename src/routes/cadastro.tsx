@@ -134,6 +134,21 @@ function SignupPage() {
             <Input id="nick" value={nick} onChange={(e) => setNick(e.target.value)} placeholder="Ex.: L&M" className="mt-2 border-border bg-surface" />
           </div>
 
+          {!user && (
+            <>
+              <div>
+                <Label htmlFor="email" className="text-sm">E-mail</Label>
+                <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" className="mt-2 border-border bg-surface" />
+              </div>
+              <div>
+                <Label htmlFor="password" className="text-sm">Senha</Label>
+                <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" className="mt-2 border-border bg-surface" />
+              </div>
+            </>
+          )}
+
+
+
           <div>
             <Label htmlFor="loc" className="text-sm">Localização</Label>
             <div className="relative mt-2">
