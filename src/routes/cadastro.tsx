@@ -25,14 +25,73 @@ export const Route = createFileRoute("/cadastro")({
 function SignupPage() {
   const [type, setType] = useState<AccountType>("Casal (Ele/Ela)");
   const [nick, setNick] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [city, setCity] = useState("");
   const [bio, setBio] = useState("");
   const [lookingFor, setLookingFor] = useState<AccountType[]>([]);
+  const [busy, setBusy] = useState(false);
   const { addProfile } = useProfiles();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const toggleLooking = (t: AccountType) =>
     setLookingFor((list) => (list.includes(t) ? list.filter((x) => x !== t) : [...list, t]));
+
+  const handleSubmit = async () => {
+    if (!nick.trim()) {
+      toast.error("Escolha um apelido para o perfil");
+      return;
+    }
+
+    if (user) {
+      setBusy(true);
+      try {
+        await addProfile({ nick, type, city, bio, hue: 300, lookingFor });
+        toast.success("Perfil criado");
+        navigate({ to: "/feed" });
+      } catch {
+        toast.error("Não foi possível salvar o perfil");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (!email.trim() || password.length < 6) {
+      toast.error("Informe um e-mail e uma senha com pelo menos 6 caracteres");
+      return;
+    }
+
+    setBusy(true);
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/entrar` },
+    });
+    setBusy(false);
+
+    if (error) {
+      toast.error(
+        error.message.includes("already registered")
+          ? "Este e-mail já tem conta. Faça login."
+          : "Não foi possível criar a conta. Tente novamente.",
+      );
+      return;
+    }
+
+    savePendingProfile({ nick: nick.trim(), type, city: city.trim(), bio: bio.trim(), hue: 300, lookingFor });
+
+    if (data.session) {
+      toast.success("Conta criada");
+      navigate({ to: "/feed" });
+      return;
+    }
+
+    toast.success("Confirme seu e-mail para ativar a conta");
+    navigate({ to: "/entrar" });
+  };
+
 
 
   return (
