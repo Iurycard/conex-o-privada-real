@@ -395,7 +395,7 @@ function SettingsPage() {
 
           <section aria-label="Ações da conta" className="space-y-3">
             <div className="overflow-hidden rounded-xl border border-destructive/25 bg-surface">
-              <SettingsRow label="Sair" destructive onClick={() => navigate({ to: "/" })} />
+              <SettingsRow label="Sair" destructive onClick={() => void handleSignOut()} />
             </div>
 
             <AlertDialog>
