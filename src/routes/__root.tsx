@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { VipProvider } from "@/context/vip";
 import { ProfilesProvider } from "@/context/profiles-context";
+import { AuthProvider } from "@/hooks/use-auth";
 import { VipModal } from "@/components/vip-modal";
 import { Toaster } from "@/components/ui/sonner";
 import { reportLovableError } from "@/lib/lovable-error-reporting";
