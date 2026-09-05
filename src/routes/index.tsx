@@ -92,8 +92,8 @@ function Landing() {
 
       <header className="relative mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
         <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-primary shadow-neon">
-
+          <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-gradient-primary shadow-neon">
+            <img src={logoImg} alt="Logo Conexão Privada" className="h-full w-full object-cover" />
           </span>
           <span className="font-display text-sm font-semibold">
             Conexão <span className="text-primary-glow">Privada</span>
