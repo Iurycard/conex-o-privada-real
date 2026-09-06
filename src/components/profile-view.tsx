@@ -23,7 +23,7 @@ import {
   X,
   Eye,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AvatarOrb, MediaBlock, TypeBadge, VipBadge } from "@/components/bits";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
