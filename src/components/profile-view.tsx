@@ -37,7 +37,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useProfiles } from "@/context/profiles-context";
 import { useVip } from "@/context/vip";
+import { useSocial } from "@/hooks/use-social";
+import { useAuth } from "@/hooks/use-auth";
+import { uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
 import type { Profile } from "@/lib/mock-data";
+
 
 function nf(n: number) {
   if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1).replace(".", ",")} mil`;
