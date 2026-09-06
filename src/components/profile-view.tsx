@@ -174,9 +174,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           <button
             onClick={() => {
               if (!following && !tryUseLike()) return;
-              toggleFollow(profile.id);
+              void social.toggleFollow(profile.id, profile.nick);
               toast.success(following ? "Você deixou de seguir" : `Agora você segue ${profile.nick}`);
             }}
+
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
               following
                 ? "border border-primary/60 bg-transparent text-primary-glow"
