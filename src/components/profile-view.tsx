@@ -255,9 +255,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <p className="text-[11px] text-muted-foreground">visualizações</p>
           </div>
           {([
-            [nf(stats.following), "seguindo", "following"],
-            [nf(stats.followers), "seguidores", "followers"],
+            [nf(followingIds.length), "seguindo", "following"],
+            [nf(followersIds.length), "seguidores", "followers"],
           ] as const).map(([value, label, view]) => (
+
             <button
               key={label}
               type="button"
