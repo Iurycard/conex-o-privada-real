@@ -23,7 +23,7 @@ import {
   X,
   Eye,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AvatarOrb, MediaBlock, TypeBadge, VipBadge } from "@/components/bits";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,7 +37,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useProfiles } from "@/context/profiles-context";
 import { useVip } from "@/context/vip";
+import { useSocial } from "@/hooks/use-social";
+import { useAuth } from "@/hooks/use-auth";
+import { uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
 import type { Profile } from "@/lib/mock-data";
+
 
 function nf(n: number) {
   if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1).replace(".", ",")} mil`;
@@ -54,22 +58,31 @@ const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
-  const { profiles, posts, isFollowing, toggleFollow, blockProfile } = useProfiles();
+  const { profiles, posts, blockProfile, updateCurrentAlbums } = useProfiles();
   const { isVip, openVipModal, tryUseLike } = useVip();
+  const social = useSocial();
+  const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [lightbox, setLightbox] = useState<{ photos: number[]; index: number } | null>(null);
   const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
-  const [privateAccessRequested, setPrivateAccessRequested] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const vip = isOwner ? isVip : profile.vip;
-  const canViewPrivateAlbum = isOwner;
-  const following = isFollowing(profile.id);
+  const vip = isOwner ? isVip || profile.vip : profile.vip;
+  const access = social.albumAccess(profile.id);
+  const canViewPrivateAlbum = isOwner || access === "approved";
+  const following = social.isFollowing(profile.id);
+
+  const publicUrls = useAlbumUrls(profile.publicAlbum);
+  const privateUrls = useAlbumUrls(canViewPrivateAlbum ? profile.privateAlbum : undefined);
+
+  useEffect(() => {
+    if (!isOwner && user && profile.id !== user.id) void social.registerVisit(profile.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id, isOwner, user?.id]);
 
   const stats = useMemo(
     () => ({
       views: seeded(profile.id + "v", 8000, 60000),
-      following: seeded(profile.id + "f", 60, 400),
-      followers: seeded(profile.id + "s", 120, 1500),
       memberMonth: meses[seeded(profile.id + "m", 0, 11)]!,
       memberYear: 2021 + seeded(profile.id + "y", 0, 4),
       onlineHours: seeded(profile.id + "o", 1, 22),
@@ -77,19 +90,52 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     [profile.id],
   );
 
-  const visitors = useMemo(
-    () => profiles.filter((item) => item.id !== profile.id).slice(0, 6),
-    [profiles, profile.id],
+  const followersIds = social.followersOf(profile.id);
+  const followingIds = social.followingOf(profile.id);
+
+  const visitors = useMemo(() => {
+    const ids = social.visits.filter((v) => v.profile_id === profile.id).map((v) => v.visitor_id);
+    const unique = [...new Set(ids)];
+    return unique
+      .map((id) => profiles.find((p) => p.id === id))
+      .filter((p): p is Profile => !!p)
+      .slice(0, 8);
+  }, [social.visits, profiles, profile.id]);
+
+  const pendingRequests = useMemo(
+    () => social.albumRequests.filter((r) => r.owner_id === profile.id && r.status === "pending"),
+    [social.albumRequests, profile.id],
   );
-  const likesLeft = useMemo(() => seeded(profile.id + "likes", 3, 12), [profile.id]);
 
   const timeline = useMemo(() => posts.filter((p) => p.authorId === profile.id), [posts, profile.id]);
-  const connectionProfiles = useMemo(
-    () => profiles.filter((item) => item.id !== profile.id),
-    [profiles, profile.id],
+  const connectionProfiles = useMemo(() => {
+    const ids = connectionsView === "followers" ? followersIds : followingIds;
+    return ids.map((id) => profiles.find((p) => p.id === id)).filter((p): p is Profile => !!p);
+  }, [connectionsView, followersIds, followingIds, profiles]);
+  const publicPhotos = useMemo(
+    () => publicUrls.map((_, i) => profile.hue + i * 14),
+    [publicUrls, profile.hue],
   );
-  const publicPhotos = useMemo(() => [0, 1, 2, 3, 4, 5].map((i) => profile.hue + i * 14), [profile.hue]);
-  const privatePhotos = useMemo(() => [0, 1, 2, 3].map((i) => profile.hue + i * 21), [profile.hue]);
+  const privatePhotos = useMemo(
+    () => (profile.privateAlbum ?? []).map((_, i) => profile.hue + i * 21),
+    [profile.privateAlbum, profile.hue],
+  );
+
+  async function handleUpload(kind: "public" | "private", files: FileList | null) {
+    if (!files?.length || !user) return;
+    setUploading(true);
+    try {
+      const paths = await uploadAlbumPhotos(user.id, kind, Array.from(files));
+      const existing = (kind === "public" ? profile.publicAlbum : profile.privateAlbum) ?? [];
+      updateCurrentAlbums(kind, [...paths, ...existing]);
+      toast.success(paths.length > 1 ? "Fotos enviadas" : "Foto enviada");
+    } catch {
+      toast.error("Não foi possível enviar a foto");
+    } finally {
+      setUploading(false);
+    }
+  }
+
 
   const bio = `${profile.bio} ${profile.age} anos. Curtimos drinks 🍸, música boa 🎶, viagens ✈️ e encontros com respeito e discrição. Sem julgamentos, sem pressa — a conexão acontece naturalmente. Chamem no privado para trocar uma ideia.`;
   const bioShort = bio.slice(0, 120);
@@ -128,9 +174,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           <button
             onClick={() => {
               if (!following && !tryUseLike()) return;
-              toggleFollow(profile.id);
+              void social.toggleFollow(profile.id, profile.nick);
               toast.success(following ? "Você deixou de seguir" : `Agora você segue ${profile.nick}`);
             }}
+
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
               following
                 ? "border border-primary/60 bg-transparent text-primary-glow"
@@ -208,9 +255,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <p className="text-[11px] text-muted-foreground">visualizações</p>
           </div>
           {([
-            [nf(stats.following), "seguindo", "following"],
-            [nf(stats.followers), "seguidores", "followers"],
+            [nf(followingIds.length), "seguindo", "following"],
+            [nf(followersIds.length), "seguidores", "followers"],
           ] as const).map(([value, label, view]) => (
+
             <button
               key={label}
               type="button"
