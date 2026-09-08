@@ -577,7 +577,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <div className="relative">
               <MediaBlock
                 hue={lightbox.photos[lightbox.index] ?? 0}
-                src={profile.publicAlbum?.[lightbox.index]}
+                src={publicUrls[lightbox.index]}
                 alt={`Foto ${lightbox.index + 1} de ${profile.nick}`}
                 className="aspect-square w-full rounded-xl"
               />
