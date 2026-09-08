@@ -366,24 +366,41 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           </button>
         </p>
 
-        {isOwner && (
-          <section className="mt-5 rounded-xl border border-gold/30 bg-gold/5 p-4 text-left">
+        {isOwner && pendingRequests.length > 0 && (
+          <section className="mt-5 rounded-xl border border-primary/30 bg-surface p-4 text-left">
             <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4 text-gold" />
-              <h2 className="text-sm font-semibold">Quem visitou seu perfil</h2>
+              <Eye className="h-4 w-4 text-primary-glow" />
+              <h2 className="text-sm font-semibold">Pedidos de acesso ao álbum privado</h2>
             </div>
-            <div className="mt-3 flex items-center gap-2">
-              {connectionProfiles.slice(0, 5).map((visitor) => (
-                <div key={visitor.id} className={!isVip ? "blur-md" : ""}>
-                  <AvatarOrb profile={visitor} size={38} />
-                </div>
-              ))}
+            <div className="mt-3 space-y-2">
+              {pendingRequests.map((req) => {
+                const asker = profiles.find((p) => p.id === req.requester_id);
+                return (
+                  <div key={req.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface-2 p-2.5">
+                    {asker && <AvatarOrb profile={asker} size={36} />}
+                    <span className="min-w-0 flex-1 truncate text-sm">{asker?.nick ?? "Alguém"}</span>
+                    <button
+                      onClick={() => {
+                        void social.respondAlbumRequest(req.id, "approved");
+                        toast.success("Acesso liberado");
+                      }}
+                      className="rounded-full bg-gradient-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
+                    >
+                      Liberar
+                    </button>
+                    <button
+                      onClick={() => {
+                        void social.respondAlbumRequest(req.id, "rejected");
+                        toast("Pedido recusado");
+                      }}
+                      className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground"
+                    >
+                      Recusar
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-            {!isVip && (
-              <button onClick={openVipModal} className="mt-3 text-xs font-medium text-gold hover:underline">
-                Assine o VIP para ver quem visitou seu perfil
-              </button>
-            )}
           </section>
         )}
 
