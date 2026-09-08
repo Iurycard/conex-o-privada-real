@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useProfiles } from "@/context/profiles-context";
-import { useVip } from "@/context/vip";
+import { useVip, FREE_LIKE_LIMIT } from "@/context/vip";
 import { useSocial } from "@/hooks/use-social";
 import { useAuth } from "@/hooks/use-auth";
 import { uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
@@ -59,7 +59,7 @@ const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
   const { profiles, posts, blockProfile, updateCurrentAlbums } = useProfiles();
-  const { isVip, openVipModal, tryUseLike } = useVip();
+  const { isVip, openVipModal, tryUseLike, likesUsedToday } = useVip();
   const social = useSocial();
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
@@ -116,10 +116,12 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     () => publicUrls.map((_, i) => profile.hue + i * 14),
     [publicUrls, profile.hue],
   );
+  const privateCount = canViewPrivateAlbum ? privateUrls.length : (profile.privateAlbum ?? []).length;
   const privatePhotos = useMemo(
-    () => (profile.privateAlbum ?? []).map((_, i) => profile.hue + i * 21),
-    [profile.privateAlbum, profile.hue],
+    () => Array.from({ length: privateCount }, (_, i) => profile.hue + i * 21),
+    [privateCount, profile.hue],
   );
+  const likesLeft = Math.max(0, FREE_LIKE_LIMIT - likesUsedToday);
 
   async function handleUpload(kind: "public" | "private", files: FileList | null) {
     if (!files?.length || !user) return;
@@ -364,24 +366,41 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           </button>
         </p>
 
-        {isOwner && (
-          <section className="mt-5 rounded-xl border border-gold/30 bg-gold/5 p-4 text-left">
+        {isOwner && pendingRequests.length > 0 && (
+          <section className="mt-5 rounded-xl border border-primary/30 bg-surface p-4 text-left">
             <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4 text-gold" />
-              <h2 className="text-sm font-semibold">Quem visitou seu perfil</h2>
+              <Eye className="h-4 w-4 text-primary-glow" />
+              <h2 className="text-sm font-semibold">Pedidos de acesso ao álbum privado</h2>
             </div>
-            <div className="mt-3 flex items-center gap-2">
-              {connectionProfiles.slice(0, 5).map((visitor) => (
-                <div key={visitor.id} className={!isVip ? "blur-md" : ""}>
-                  <AvatarOrb profile={visitor} size={38} />
-                </div>
-              ))}
+            <div className="mt-3 space-y-2">
+              {pendingRequests.map((req) => {
+                const asker = profiles.find((p) => p.id === req.requester_id);
+                return (
+                  <div key={req.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface-2 p-2.5">
+                    {asker && <AvatarOrb profile={asker} size={36} />}
+                    <span className="min-w-0 flex-1 truncate text-sm">{asker?.nick ?? "Alguém"}</span>
+                    <button
+                      onClick={() => {
+                        void social.respondAlbumRequest(req.id, "approved");
+                        toast.success("Acesso liberado");
+                      }}
+                      className="rounded-full bg-gradient-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
+                    >
+                      Liberar
+                    </button>
+                    <button
+                      onClick={() => {
+                        void social.respondAlbumRequest(req.id, "rejected");
+                        toast("Pedido recusado");
+                      }}
+                      className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground"
+                    >
+                      Recusar
+                    </button>
+                  </div>
+                );
+              })}
             </div>
-            {!isVip && (
-              <button onClick={openVipModal} className="mt-3 text-xs font-medium text-gold hover:underline">
-                Assine o VIP para ver quem visitou seu perfil
-              </button>
-            )}
           </section>
         )}
 
@@ -446,7 +465,23 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
               </TabsList>
 
               <TabsContent value="publico">
-                <div className="grid grid-cols-3 gap-2 pb-6">
+                {isOwner && (
+                  <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-3 text-sm text-muted-foreground hover:text-foreground">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      disabled={uploading}
+                      onChange={(e) => {
+                        void handleUpload("public", e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                    {uploading ? "Enviando…" : "Enviar fotos para o álbum público"}
+                  </label>
+                )}
+                <div className="mt-3 grid grid-cols-3 gap-2 pb-6">
                   {publicPhotos.map((h, i) => (
                     <button
                       key={i}
@@ -454,19 +489,38 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                       aria-label={`Abrir foto ${i + 1}`}
                       className="overflow-hidden rounded-xl"
                     >
-                      <MediaBlock hue={h} src={profile.publicAlbum?.[i]} alt={`Foto pública de ${profile.nick}`} className="aspect-square w-full" />
+                      <MediaBlock hue={h} src={publicUrls[i]} alt={`Foto pública de ${profile.nick}`} className="aspect-square w-full" />
                     </button>
                   ))}
+                  {publicPhotos.length === 0 && (
+                    <p className="col-span-3 py-6 text-center text-sm text-muted-foreground">Nenhuma foto ainda.</p>
+                  )}
                 </div>
               </TabsContent>
 
               <TabsContent value="privado">
-                <div className="grid grid-cols-3 gap-2">
+                {isOwner && (
+                  <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-gold/40 bg-gold/5 py-3 text-sm text-gold">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      disabled={uploading}
+                      onChange={(e) => {
+                        void handleUpload("private", e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                    {uploading ? "Enviando…" : "Enviar fotos para o álbum privado"}
+                  </label>
+                )}
+                <div className="mt-3 grid grid-cols-3 gap-2">
                   {privatePhotos.map((h, i) => (
                     <div key={i} className="relative aspect-square overflow-hidden rounded-xl">
                       <MediaBlock
                         hue={h}
-                        src={profile.privateAlbum?.[i]}
+                        src={canViewPrivateAlbum ? privateUrls[i] : undefined}
                         alt={canViewPrivateAlbum ? `Foto privada de ${profile.nick}` : "Foto privada bloqueada"}
                         className={`h-full w-full ${canViewPrivateAlbum ? "" : "blur-lg"}`}
                       />
@@ -477,19 +531,30 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                       )}
                     </div>
                   ))}
+                  {privatePhotos.length === 0 && (
+                    <p className="col-span-3 py-6 text-center text-sm text-muted-foreground">Nenhuma foto ainda.</p>
+                  )}
                 </div>
-                <button
-                  onClick={() => {
-                    setPrivateAccessRequested(true);
-                    toast.success("Solicitação enviada ao dono do álbum");
-                  }}
-                  disabled={privateAccessRequested}
-                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-gold/45 bg-gold/5 py-3 text-sm font-medium text-gold hover:bg-gold/10 disabled:cursor-default disabled:opacity-70"
-                >
-                  <Lock className="h-4 w-4" />
-                  {privateAccessRequested ? "Aguardando autorização do dono" : "Solicitar Acesso ao Álbum Privado"}
-                </button>
-                {!isVip && (
+                {!isOwner && (
+                  <button
+                    onClick={() => {
+                      if (access === "none" || access === "rejected") {
+                        void social.requestAlbumAccess(profile.id, profile.nick);
+                        toast.success("Solicitação enviada ao dono do álbum");
+                      }
+                    }}
+                    disabled={access === "pending" || access === "approved"}
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-gold/45 bg-gold/5 py-3 text-sm font-medium text-gold hover:bg-gold/10 disabled:cursor-default disabled:opacity-70"
+                  >
+                    <Lock className="h-4 w-4" />
+                    {access === "approved"
+                      ? "Acesso liberado"
+                      : access === "pending"
+                        ? "Aguardando autorização do dono"
+                        : "Solicitar Acesso ao Álbum Privado"}
+                  </button>
+                )}
+                {!isVip && !isOwner && (
                   <button
                     onClick={openVipModal}
                     className="mt-2 mb-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-gold py-3 text-sm font-semibold text-gold-foreground shadow-gold"
@@ -512,7 +577,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <div className="relative">
               <MediaBlock
                 hue={lightbox.photos[lightbox.index] ?? 0}
-                src={profile.publicAlbum?.[lightbox.index]}
+                src={publicUrls[lightbox.index]}
                 alt={`Foto ${lightbox.index + 1} de ${profile.nick}`}
                 className="aspect-square w-full rounded-xl"
               />
