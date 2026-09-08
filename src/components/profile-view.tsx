@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useProfiles } from "@/context/profiles-context";
-import { useVip } from "@/context/vip";
+import { useVip, FREE_LIKE_LIMIT } from "@/context/vip";
 import { useSocial } from "@/hooks/use-social";
 import { useAuth } from "@/hooks/use-auth";
 import { uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
@@ -59,7 +59,7 @@ const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
   const { profiles, posts, blockProfile, updateCurrentAlbums } = useProfiles();
-  const { isVip, openVipModal, tryUseLike } = useVip();
+  const { isVip, openVipModal, tryUseLike, likesUsedToday } = useVip();
   const social = useSocial();
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
@@ -116,10 +116,12 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     () => publicUrls.map((_, i) => profile.hue + i * 14),
     [publicUrls, profile.hue],
   );
+  const privateCount = canViewPrivateAlbum ? privateUrls.length : (profile.privateAlbum ?? []).length;
   const privatePhotos = useMemo(
-    () => (profile.privateAlbum ?? []).map((_, i) => profile.hue + i * 21),
-    [profile.privateAlbum, profile.hue],
+    () => Array.from({ length: privateCount }, (_, i) => profile.hue + i * 21),
+    [privateCount, profile.hue],
   );
+  const likesLeft = Math.max(0, FREE_LIKE_LIMIT - likesUsedToday);
 
   async function handleUpload(kind: "public" | "private", files: FileList | null) {
     if (!files?.length || !user) return;
