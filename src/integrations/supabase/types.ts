@@ -293,6 +293,8 @@ export type Database = {
           gender: string | null
           hue: number
           id: string
+          latitude: number | null
+          longitude: number | null
           looking_for: string[]
           nick: string
           private_album: string[]
@@ -311,6 +313,8 @@ export type Database = {
           gender?: string | null
           hue?: number
           id: string
+          latitude?: number | null
+          longitude?: number | null
           looking_for?: string[]
           nick: string
           private_album?: string[]
@@ -329,6 +333,8 @@ export type Database = {
           gender?: string | null
           hue?: number
           id?: string
+          latitude?: number | null
+          longitude?: number | null
           looking_for?: string[]
           nick?: string
           private_album?: string[]

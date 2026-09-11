@@ -3,7 +3,7 @@ import { Heart, MessageSquare, MoreHorizontal, Play, Lock, Crown, Megaphone } fr
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AvatarOrb, MediaBlock, VipBadge } from "@/components/bits";
-import { ads, posts, profileById } from "@/lib/mock-data";
+import { ads, profileById } from "@/lib/mock-data";
 import { useVip } from "@/context/vip";
 import { useProfiles } from "@/context/profiles-context";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,8 +34,7 @@ export const Route = createFileRoute("/_authenticated/feed")({
 });
 
 
-function PostCard({ postId }: { postId: string }) {
-  const post = posts.find((p) => p.id === postId)!;
+function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][number] }) {
   const author = profileById(post.authorId);
   const { isVip, openVipModal, tryUseLike } = useVip();
   const [liked, setLiked] = useState(false);
@@ -185,10 +184,11 @@ function AdCard({ index }: { index: number }) {
 
 function FeedPage() {
   const { isVip, openVipModal } = useVip();
-  const { isFollowing, getProfile } = useProfiles();
+  const { isFollowing, getProfile, isBlocked, posts } = useProfiles();
   const [tab, setTab] = useState<"seguindo" | "paravoce" | "todos">("todos");
 
   const visiblePosts = posts.filter((post) => {
+    if (isBlocked(post.authorId)) return false;
     if (tab === "todos") return true;
     if (tab === "seguindo") return isFollowing(post.authorId);
     return getProfile(post.authorId)?.vip ?? false;
@@ -229,7 +229,7 @@ function FeedPage() {
 
         {visiblePosts.map((post, i) => (
           <div key={post.id} className="space-y-4">
-            <PostCard postId={post.id} />
+            <PostCard post={post} />
             {!isVip && (i + 1) % 2 === 0 && <AdCard index={i} />}
           </div>
         ))}

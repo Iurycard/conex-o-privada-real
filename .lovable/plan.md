@@ -32,7 +32,7 @@ Hoje o app é um protótipo completo no visual, mas os dados vivem só na memór
 7. **Moderação**: denúncias, painel de administração, bloqueios efetivos.
 
 ## Detalhes técnicos
-- Passos 1–5 exigem ativar o Lovable Cloud (banco, autenticação, armazenamento de arquivos) com RLS por usuário; os provedores mock (`ProfilesProvider`, `mock-data.ts`) passam a ler do banco.
+
 - Novas rotas previstas: `/entrar`, `/recuperar-senha`, `/eventos/$id`, `/chat/$id`, `/admin`, `/termos`, `/privacidade`, e um grupo protegido para as telas que exigem login.
 - O passo 6 usa Stripe (ou Pix via provedor) com webhook para marcar VIP.
 

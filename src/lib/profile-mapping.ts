@@ -14,6 +14,7 @@ export type ProfileRow = {
   city: string;
   bio: string;
   gender: string | null;
+  orientation: string | null;
   birth_date: string | null;
   hue: number;
   avatar: string | null;
@@ -22,6 +23,8 @@ export type ProfileRow = {
   looking_for: string[];
   public_album: string[];
   private_album: string[];
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 function ageFrom(birthDate: string | null): number {
@@ -45,7 +48,10 @@ export function rowToProfile(row: ProfileRow): Profile {
     hue: row.hue,
     bio: row.bio || "Perfil recém-criado.",
     ...(row.gender ? { gender: row.gender } : {}),
+    ...(row.orientation ? { orientation: row.orientation } : {}),
     ...(row.birth_date ? { birthDate: row.birth_date } : {}),
+    ...(typeof row.latitude === "number" ? { latitude: row.latitude } : {}),
+    ...(typeof row.longitude === "number" ? { longitude: row.longitude } : {}),
     avatar: row.avatar ?? randomAvatar(),
     cover: row.cover ?? randomCover(),
     lookingFor: (row.looking_for ?? []) as AccountType[],

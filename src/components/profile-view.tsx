@@ -11,6 +11,7 @@ import {
   Lock,
   MapPin,
   MessageSquare,
+  MoreHorizontal,
   MoreVertical,
   PenSquare,
   Play,
@@ -52,14 +53,101 @@ function seeded(seed: string, min: number, max: number) {
 
 const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
+function LikeAndCommentsRow({
+  likes,
+  comments,
+  liked,
+  onLike,
+  onOpenLikes,
+  onOpenComments,
+}: {
+  likes: number;
+  comments: number;
+  liked: boolean;
+  onLike: () => void;
+  onOpenLikes: () => void;
+  onOpenComments: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground">
+      <button
+        type="button"
+        onClick={onLike}
+        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2 py-1 hover:text-foreground"
+      >
+        <Heart className={`h-3.5 w-3.5 ${liked ? "fill-current text-primary-glow" : ""}`} />
+        <span>{likes}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onOpenLikes}
+        className="text-[11px] font-medium text-primary-glow hover:underline"
+      >
+        Ver curtidas
+      </button>
+      <button
+        type="button"
+        onClick={onOpenComments}
+        className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2 py-1 hover:text-foreground"
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+        <span>{comments}</span>
+      </button>
+    </div>
+  );
+}
+
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
-  const { profiles, posts, isFollowing, toggleFollow, blockProfile } = useProfiles();
+  const { profiles, posts, isFollowing, toggleFollow, blockProfile, isBlocked, unblockProfile, createPost } = useProfiles();
   const { isVip, openVipModal, tryUseLike } = useVip();
   const [expanded, setExpanded] = useState(false);
-  const [lightbox, setLightbox] = useState<{ photos: number[]; index: number } | null>(null);
+  const [lightbox, setLightbox] = useState<{ photos: number[]; index: number; album: "public" | "private" } | null>(null);
   const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
   const [privateAccessRequested, setPrivateAccessRequested] = useState(false);
+  const [galleryLikes, setGalleryLikes] = useState<Record<number, number>>({ 0: 128, 1: 96, 2: 143, 3: 109, 4: 176, 5: 132 });
+  const [galleryLiked, setGalleryLiked] = useState<Record<number, boolean>>({});
+  const [galleryComments, setGalleryComments] = useState<Record<number, number>>({ 0: 16, 1: 11, 2: 18, 3: 14, 4: 22, 5: 17 });
+  const [likesModalOpen, setLikesModalOpen] = useState(false);
+  const [commentsModalOpen, setCommentsModalOpen] = useState(false);
+
+  const blocked = isBlocked(profile.id);
+
+  if (blocked) {
+    return (
+      <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-0">
+        <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-muted text-muted-foreground">
+            <Ban className="h-5 w-5" />
+          </div>
+          <h2 className="mt-4 text-xl font-semibold">Perfil bloqueado</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Você bloqueou {profile.nick}. Esse perfil vai ficar oculto até você desbloquear.
+          </p>
+          <div className="mt-5 flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                unblockProfile(profile.id);
+                toast.success(`${profile.nick} desbloqueado`);
+                navigate({ to: "/explorar" });
+              }}
+              className="rounded-full bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+            >
+              Desbloquear
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/explorar" })}
+              className="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              Voltar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const vip = isOwner ? isVip : profile.vip;
   const canViewPrivateAlbum = isOwner;
@@ -158,7 +246,19 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <DropdownMenuItem onClick={() => (isVip ? navigate({ to: "/chat" }) : openVipModal())}>
               <MessageSquare className="mr-2 h-4 w-4" /> Mensagem privada
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => toast.success("Publicação no mural criada")}>
+            <DropdownMenuItem
+              onClick={() => {
+                const value = window.prompt(`Escreva sua mensagem para o mural de ${profile.nick}`);
+                if (!value || !value.trim()) return;
+
+                createPost({
+                  text: value.trim(),
+                  authorId: profile.id,
+                });
+
+                toast.success(`Publicação adicionada ao mural de ${profile.nick}`);
+              }}
+            >
               <PenSquare className="mr-2 h-4 w-4" /> Postar no mural
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => { blockProfile(profile.id); toast.success(`${profile.nick} bloqueado`); navigate({ to: "/explorar" }); }}>
@@ -316,26 +416,6 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           </button>
         </p>
 
-        {isOwner && (
-          <section className="mt-5 rounded-xl border border-gold/30 bg-gold/5 p-4 text-left">
-            <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4 text-gold" />
-              <h2 className="text-sm font-semibold">Quem visitou seu perfil</h2>
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              {connectionProfiles.slice(0, 5).map((visitor) => (
-                <div key={visitor.id} className={!isVip ? "blur-md" : ""}>
-                  <AvatarOrb profile={visitor} size={38} />
-                </div>
-              ))}
-            </div>
-            {!isVip && (
-              <button onClick={openVipModal} className="mt-3 text-xs font-medium text-gold hover:underline">
-                Assine o VIP para ver quem visitou seu perfil
-              </button>
-            )}
-          </section>
-        )}
 
         {/* TABS */}
         <Tabs defaultValue="principal" className="mt-6 text-left">
@@ -400,14 +480,36 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
               <TabsContent value="publico">
                 <div className="grid grid-cols-3 gap-2 pb-6">
                   {publicPhotos.map((h, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setLightbox({ photos: publicPhotos, index: i })}
-                      aria-label={`Abrir foto ${i + 1}`}
-                      className="overflow-hidden rounded-xl"
-                    >
-                      <MediaBlock hue={h} src={profile.publicAlbum?.[i]} alt={`Foto pública de ${profile.nick}`} className="aspect-square w-full" />
-                    </button>
+                    <div key={i} className="group relative overflow-hidden rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setLightbox({ photos: publicPhotos, index: i, album: "public" })}
+                        aria-label={`Abrir foto ${i + 1}`}
+                        className="block w-full overflow-hidden rounded-xl"
+                      >
+                        <MediaBlock hue={h} src={profile.publicAlbum?.[i]} alt={`Foto pública de ${profile.nick}`} className="aspect-square w-full" />
+                      </button>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          aria-label={`Mais opções da foto ${i + 1}`}
+                          className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border border-border/60 bg-background/70 text-foreground backdrop-blur transition-opacity hover:bg-background/90"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52 border-border bg-surface">
+                          <DropdownMenuItem onClick={() => setLightbox({ photos: publicPhotos, index: i, album: "public" })}>
+                            <Eye className="mr-2 h-4 w-4" /> Ver publicação
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate({ to: "/perfil/$id", params: { id: profile.id } })}>
+                            <UserRound className="mr-2 h-4 w-4" /> Visitar perfil
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => toast.success("Foto denunciada")}>
+                            <Flag className="mr-2 h-4 w-4" /> Denunciar foto
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   ))}
                 </div>
               </TabsContent>
@@ -461,50 +563,99 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <DialogTitle className="text-sm">Foto de {profile.nick}</DialogTitle>
           </DialogHeader>
           {lightbox !== null && (
-            <div className="relative">
-              <MediaBlock
-                hue={lightbox.photos[lightbox.index] ?? 0}
-                src={profile.publicAlbum?.[lightbox.index]}
-                alt={`Foto ${lightbox.index + 1} de ${profile.nick}`}
-                className="aspect-square w-full rounded-xl"
+            <div className="space-y-3">
+              <div className="relative">
+                <MediaBlock
+                  hue={lightbox.photos[lightbox.index] ?? 0}
+                  src={profile.publicAlbum?.[lightbox.index]}
+                  alt={`Foto ${lightbox.index + 1} de ${profile.nick}`}
+                  className="aspect-square w-full rounded-xl"
+                />
+                <button
+                  onClick={() =>
+                    setLightbox((current) =>
+                      current
+                        ? { ...current, index: (current.index - 1 + current.photos.length) % current.photos.length }
+                        : null,
+                    )
+                  }
+                  aria-label="Foto anterior"
+                  className="absolute left-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground backdrop-blur transition-colors hover:bg-background"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() =>
+                    setLightbox((current) =>
+                      current
+                        ? { ...current, index: (current.index + 1) % current.photos.length }
+                        : null,
+                    )
+                  }
+                  aria-label="Próxima foto"
+                  className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground backdrop-blur transition-colors hover:bg-background"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+                <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-background/75 px-2.5 py-1 text-[11px] text-foreground backdrop-blur">
+                  {lightbox.index + 1} / {lightbox.photos.length}
+                </span>
+              </div>
+
+              <LikeAndCommentsRow
+                likes={galleryLikes[lightbox.index] ?? 0}
+                comments={galleryComments[lightbox.index] ?? 0}
+                liked={galleryLiked[lightbox.index] ?? false}
+                onLike={() => {
+                  const currentlyLiked = galleryLiked[lightbox.index] ?? false;
+                  setGalleryLiked((current) => ({ ...current, [lightbox.index]: !currentlyLiked }));
+                  setGalleryLikes((current) => ({
+                    ...current,
+                    [lightbox.index]: Math.max(0, (current[lightbox.index] ?? 0) + (currentlyLiked ? -1 : 1)),
+                  }));
+                }}
+                onOpenLikes={() => setLikesModalOpen(true)}
+                onOpenComments={() => setCommentsModalOpen(true)}
               />
-              <button
-                onClick={() =>
-                  setLightbox((current) =>
-                    current
-                      ? { ...current, index: (current.index - 1 + current.photos.length) % current.photos.length }
-                      : null,
-                  )
-                }
-                aria-label="Foto anterior"
-                className="absolute left-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground backdrop-blur transition-colors hover:bg-background"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <button
-                onClick={() =>
-                  setLightbox((current) =>
-                    current
-                      ? { ...current, index: (current.index + 1) % current.photos.length }
-                      : null,
-                  )
-                }
-                aria-label="Próxima foto"
-                className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground backdrop-blur transition-colors hover:bg-background"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-              <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-background/75 px-2.5 py-1 text-[11px] text-foreground backdrop-blur">
-                {lightbox.index + 1} / {lightbox.photos.length}
-              </span>
             </div>
           )}
-          <button
-            onClick={() => setLightbox(null)}
-            className="mx-auto inline-flex items-center gap-1 rounded-full border border-border px-4 py-2 text-xs text-muted-foreground"
-          >
-            <X className="h-3.5 w-3.5" /> Fechar
-          </button>
+        
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={likesModalOpen} onOpenChange={setLikesModalOpen}>
+        <DialogContent className="max-w-sm border-border bg-surface">
+          <DialogHeader>
+            <DialogTitle>Pessoas que curtiram</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-2 text-sm text-muted-foreground">
+            {profiles.slice(0, 5).map((person) => (
+              <div key={person.id} className="flex items-center gap-3 rounded-lg border border-border bg-surface-2 px-2 py-2">
+                <AvatarOrb profile={person} size={28} />
+                <span className="font-medium text-foreground">{person.nick}</span>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={commentsModalOpen} onOpenChange={setCommentsModalOpen}>
+        <DialogContent className="max-w-sm border-border bg-surface">
+          <DialogHeader>
+            <DialogTitle>Comentários</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2 text-sm">
+            {[
+              { user: "Lia", text: "Foto incrível, muito boa!" },
+              { user: "Mika", text: "Perfeita essa composição." },
+              { user: "Dani", text: "To curtindo demais." },
+            ].map((comment) => (
+              <div key={comment.user} className="rounded-xl border border-border bg-surface-2 p-3">
+                <p className="font-medium text-foreground">{comment.user}</p>
+                <p className="mt-1 text-muted-foreground">{comment.text}</p>
+              </div>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
     </>

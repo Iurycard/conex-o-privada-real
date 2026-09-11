@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, ImagePlus, MapPin, ShieldCheck } from "lucide-react";
-import { accountTypes, type AccountType } from "@/lib/mock-data";
+import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/mock-data";
 import { useProfiles } from "@/context/profiles-context";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+
+export async function getCityCoordinates(cityName: string): Promise<{ lat: number; lon: number } | null> { if (!cityName.trim()) return null; try { const response = await fetch( `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}&limit=1` ); const data = await response.json(); if (data && data.length > 0) { return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), }; } return null; } catch (error) { console.error("Erro ao buscar coordenadas da cidade:", error); return null; }}
 
 export const Route = createFileRoute("/cadastro")({
   head: () => ({
@@ -31,15 +33,33 @@ function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [city, setCity] = useState("");
+  const [orientation, setOrientation] = useState("Heterossexual");
   const [bio, setBio] = useState("");
   const [lookingFor, setLookingFor] = useState<AccountType[]>([]);
   const [busy, setBusy] = useState(false);
   const { addProfile } = useProfiles();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+const [isGeocoding, setIsGeocoding] = useState(false);
 
   const toggleLooking = (t: AccountType) =>
     setLookingFor((list) => (list.includes(t) ? list.filter((x) => x !== t) : [...list, t]));
+
+  const handleCityBlur = async () => {
+  if (!city.trim()) return;
+
+  setIsGeocoding(true);
+  const locationData = await getCityCoordinates(city);
+
+  if (locationData) {
+    setCoords(locationData);
+    console.log(`Coordenadas salvas para ${city}:`, locationData);
+  } else {
+    console.warn('Cidade não encontrada para gerar coordenadas.');
+  }
+  setIsGeocoding(false);
+};
 
   const handleSubmit = async () => {
     if (!nick.trim()) {
@@ -47,10 +67,22 @@ function SignupPage() {
       return;
     }
 
+    const payload = {
+      nick,
+      type,
+      city,
+      bio,
+      hue: 300,
+      lookingFor,
+      orientation,
+      latitude: coords?.lat,
+      longitude: coords?.lon,
+    };
+
     if (user) {
       setBusy(true);
       try {
-        await addProfile({ nick, type, city, bio, hue: 300, lookingFor });
+        await addProfile(payload);
         toast.success("Perfil criado");
         navigate({ to: "/feed" });
       } catch {
@@ -83,7 +115,17 @@ function SignupPage() {
       return;
     }
 
-    savePendingProfile({ nick: nick.trim(), type, city: city.trim(), bio: bio.trim(), hue: 300, lookingFor });
+    savePendingProfile({
+      nick: nick.trim(),
+      type,
+      city: city.trim(),
+      bio: bio.trim(),
+      hue: 300,
+      lookingFor,
+      orientation,
+      latitude: coords?.lat,
+      longitude: coords?.lon,
+    });
 
     if (data.session) {
       toast.success("Conta criada");
@@ -156,7 +198,32 @@ function SignupPage() {
             <Label htmlFor="loc" className="text-sm">Localização</Label>
             <div className="relative mt-2">
               <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input id="loc" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Cidade, estado" className="border-border bg-surface pl-9" />
+              <Input
+                id="loc"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                onBlur={handleCityBlur}
+                placeholder="Cidade, estado"
+                className="border-border bg-surface pl-9"
+              />
+              {isGeocoding && <span className="mt-1 block text-xs text-muted-foreground">Buscando coordenadas...</span>}
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-sm">Orientação sexual</Label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {sexualOrientationOptions.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={orientation === option}
+                  onClick={() => setOrientation(option)}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${orientation === option ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
+                >
+                  {option}
+                </button>
+              ))}
             </div>
           </div>
 

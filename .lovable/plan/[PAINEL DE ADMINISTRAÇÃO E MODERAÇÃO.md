@@ -14,3 +14,11 @@ Exiba 4 cards de estatísticas rápidas com ícones:
 * Opções de alternar status do usuário (Ativo, Suspenso, Verificado).
 - Tab 3: "Auditoria de Mídias": 
 * Grid com as fotos/vídeos mais recentes dos álbuns com botão rápido de remoção imediata.
+- Tab 4: "Solicitações de Verificação":
+* Fila com fotos de verificação enviadas pelos usuários comparadas às fotos do perfil.
+* Botões de ação: "Conceder Selo Verificado" ou "Rejeitar Solicitação".
+
+-Tab 5: "Controle de Sistema e Monetização":
+* Toggle global para ativar/desativar exibição de anúncios (AdMob).
+* Atalhos de suporte: Dar/remover VIP manualmente a um usuário específico.
+* Histórico de Ações Administrativas (Logs de moderação).

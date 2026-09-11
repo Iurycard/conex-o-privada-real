@@ -4,6 +4,7 @@ import {
   profiles as seedProfiles,
   randomAvatar,
   randomCover,
+  randomPostImage,
   randomPrivateAlbum,
   randomPublicAlbum,
   type AccountType,
@@ -22,7 +23,13 @@ export type NewProfileInput = {
   bio: string;
   hue: number;
   lookingFor?: AccountType[];
+  orientation?: string;
+  latitude?: number;
+  longitude?: number;
 };
+
+const BLOCKED_STORAGE_KEY = "conexao-privada.blockedIds";
+const POSTS_STORAGE_KEY = "conexao-privada.posts";
 
 type ProfilesContextValue = {
   profiles: Profile[];
@@ -32,13 +39,15 @@ type ProfilesContextValue = {
   setCurrentId: (id: string) => void;
   getProfile: (id: string) => Profile | undefined;
   addProfile: (input: NewProfileInput) => Promise<string>;
+  createPost: (input: { text: string; mediaType?: "image" | "video"; mediaUrl?: string; authorId?: string }) => void;
   updateCurrentAlbums: (album: "public" | "private", photos: string[]) => void;
   updateCurrentProfile: (
-    changes: Partial<Pick<Profile, "nick" | "type" | "gender" | "birthDate" | "city" | "bio" | "lookingFor" | "avatar">>,
+    changes: Partial<Pick<Profile, "nick" | "type" | "gender" | "orientation" | "birthDate" | "city" | "bio" | "lookingFor" | "avatar" | "latitude" | "longitude">>,
   ) => void;
   blockedIds: string[];
   blockProfile: (id: string) => void;
   unblockProfile: (id: string) => void;
+  isBlocked: (id: string) => boolean;
   isFollowing: (id: string) => boolean;
   toggleFollow: (id: string) => void;
 };
@@ -49,10 +58,47 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [dbProfiles, setDbProfiles] = useState<Profile[]>([]);
   const [localProfiles, setLocalProfiles] = useState<Profile[]>(seedProfiles);
-  const [posts, setPosts] = useState<Post[]>(seedPosts);
+  const [posts, setPosts] = useState<Post[]>(() => {
+    if (typeof window === "undefined") return seedPosts;
+
+    try {
+      const raw = window.localStorage.getItem(POSTS_STORAGE_KEY);
+      if (!raw) return seedPosts;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : seedPosts;
+    } catch {
+      return seedPosts;
+    }
+  });
   const [fallbackId, setFallbackId] = useState<string>(seedProfiles[0]!.id);
   const [following, setFollowing] = useState<Record<string, boolean>>({});
-  const [blockedIds, setBlockedIds] = useState<string[]>([]);
+  const [blockedIds, setBlockedIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+
+    try {
+      const raw = window.localStorage.getItem(BLOCKED_STORAGE_KEY);
+      if (!raw) return [];
+
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(blockedIds));
+    }
+  }, [blockedIds]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
+    }
+  }, [posts]);
 
   const loadProfiles = useCallback(async () => {
     if (!user) {
@@ -73,6 +119,9 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           hue: pending.hue,
           avatar: randomAvatar(),
           cover: randomCover(),
+          orientation: pending.orientation ?? null,
+          latitude: pending.latitude ?? null,
+          longitude: pending.longitude ?? null,
           looking_for: pending.lookingFor,
           public_album: randomPublicAlbum(),
           private_album: randomPrivateAlbum(),
@@ -128,6 +177,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
             cover: randomCover(),
             hue: input.hue,
             bio: input.bio.trim() || "Perfil recém-criado.",
+            orientation: input.orientation,
             lookingFor: input.lookingFor ?? [],
             publicAlbum: randomPublicAlbum(),
             privateAlbum: randomPrivateAlbum(),
@@ -146,6 +196,9 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           hue: input.hue,
           avatar: randomAvatar(),
           cover: randomCover(),
+          orientation: input.orientation ?? null,
+          latitude: input.latitude ?? null,
+          longitude: input.longitude ?? null,
           looking_for: input.lookingFor ?? [],
           public_album: randomPublicAlbum(),
           private_album: randomPrivateAlbum(),
@@ -172,6 +225,23 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         ]);
         return profile.id;
       },
+      createPost: ({ text, mediaType = "image", mediaUrl, authorId }) => {
+        const message = text.trim();
+        if (!message && !mediaUrl) return;
+
+        const createdPost: Post = {
+          id: `post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          authorId: authorId ?? currentId,
+          time: "agora",
+          text: message || "Nova publicação",
+          likes: 0,
+          comments: 0,
+          media: mediaType === "video" ? "video" : "foto",
+          image: mediaUrl ?? randomPostImage(),
+        };
+
+        setPosts((list) => [createdPost, ...list]);
+      },
       updateCurrentAlbums: (album, photos) => {
         const key = album === "public" ? "publicAlbum" : "privateAlbum";
         if (user && currentId === user.id) {
@@ -195,11 +265,14 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
               ...(changes.nick !== undefined ? { nick: changes.nick } : {}),
               ...(changes.type !== undefined ? { type: changes.type } : {}),
               ...(changes.gender !== undefined ? { gender: changes.gender } : {}),
+              ...(changes.orientation !== undefined ? { orientation: changes.orientation ?? null } : {}),
               ...(changes.birthDate !== undefined ? { birth_date: changes.birthDate || null } : {}),
               ...(changes.city !== undefined ? { city: changes.city } : {}),
               ...(changes.bio !== undefined ? { bio: changes.bio } : {}),
               ...(changes.lookingFor !== undefined ? { looking_for: changes.lookingFor } : {}),
               ...(changes.avatar !== undefined ? { avatar: changes.avatar } : {}),
+              ...(changes.latitude !== undefined ? { latitude: changes.latitude ?? null } : {}),
+              ...(changes.longitude !== undefined ? { longitude: changes.longitude ?? null } : {}),
             })
             .eq("id", user.id);
           return;
@@ -211,6 +284,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       blockedIds,
       blockProfile: (id) => setBlockedIds((ids) => (ids.includes(id) ? ids : [...ids, id])),
       unblockProfile: (id) => setBlockedIds((ids) => ids.filter((blockedId) => blockedId !== id)),
+      isBlocked: (id: string) => blockedIds.includes(id),
       isFollowing: (id: string) => !!following[id],
       toggleFollow: (id: string) => setFollowing((f) => ({ ...f, [id]: !f[id] })),
     };

@@ -10,10 +10,15 @@ import {
   Shield,
   UserPlus,
   PenSquare,
+  Image as ImageIcon,
+  Lock,
+  Video,
+  X,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState, type ChangeEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useVip } from "@/context/vip";
+import { useProfiles } from "@/context/profiles-context";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -28,8 +33,63 @@ import {
 } from "@/components/ui/dialog";
 
 function PostButton() {
+  const { isVip, openVipModal } = useVip();
+  const { createPost } = useProfiles();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<"image" | "video" | null>(null);
+
+  const resetDraft = () => {
+    setText("");
+    setMediaUrl(null);
+    setMediaType(null);
+  };
+
+  const handleMediaChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const isVideo = file.type.startsWith("video/");
+    if (isVideo && !isVip) {
+      event.target.value = "";
+      openVipModal();
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setMediaUrl(reader.result);
+        setMediaType(isVideo ? "video" : "image");
+      }
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const handlePublish = () => {
+    const hasContent = text.trim().length > 0 || !!mediaUrl;
+    if (!hasContent) {
+      toast.error("Adicione texto ou uma mídia antes de publicar");
+      return;
+    }
+
+    if (mediaType === "video" && !isVip) {
+      openVipModal();
+      return;
+    }
+
+    createPost({
+      text,
+      mediaType: mediaType ?? (mediaUrl ? "image" : undefined),
+      mediaUrl: mediaUrl ?? undefined,
+    });
+
+    resetDraft();
+    setOpen(false);
+    toast.success("Publicação criada");
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -44,6 +104,7 @@ function PostButton() {
           <DialogTitle>Nova publicação</DialogTitle>
           <DialogDescription>Compartilhe algo com a comunidade.</DialogDescription>
         </DialogHeader>
+
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -51,23 +112,63 @@ function PostButton() {
           rows={4}
           aria-label="Texto da publicação"
         />
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border bg-surface px-3 py-2 text-xs text-muted-foreground hover:text-foreground">
+              <ImageIcon className="h-4 w-4" />
+              Foto
+              <input type="file" accept="image/*" className="sr-only" onChange={handleMediaChange} />
+            </label>
+
+            <label
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs ${
+                isVip
+                  ? "border-border bg-surface text-muted-foreground hover:text-foreground"
+                  : "border-gold/40 text-gold"
+              }`}
+            >
+              {isVip ? <Video className="h-4 w-4" /> : <Lock className="h-3.5 w-3.5" />}
+              {isVip ? "Vídeo" : "Vídeo (VIP)"}
+              <input type="file" accept="video/*" className="sr-only" onChange={handleMediaChange} />
+            </label>
+          </div>
+
+          {mediaUrl && (
+            <div className="relative overflow-hidden rounded-xl border border-border bg-surface">
+              {mediaType === "video" ? (
+                <video src={mediaUrl} controls className="max-h-60 w-full object-cover" />
+              ) : (
+                <img src={mediaUrl} alt="Mídia anexada" className="max-h-60 w-full object-cover" />
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMediaUrl(null);
+                  setMediaType(null);
+                }}
+                className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white"
+                aria-label="Remover mídia"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="flex justify-end gap-2">
           <button
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              resetDraft();
+              setOpen(false);
+            }}
             className="rounded-full border border-border px-4 py-2 text-xs text-muted-foreground"
           >
             Cancelar
           </button>
           <button
-            onClick={() => {
-              if (!text.trim()) {
-                toast.error("Escreva algo antes de publicar");
-                return;
-              }
-              setText("");
-              setOpen(false);
-              toast.success("Publicação criada (protótipo)");
-            }}
+            onClick={handlePublish}
             className="rounded-full bg-gradient-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
           >
             Publicar

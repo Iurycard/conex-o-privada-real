@@ -15,6 +15,7 @@ import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as SaidaRouteImport } from './routes/saida'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
 import { Route as AuthenticatedEditarPerfilRouteImport } from './routes/_authenticated/editar-perfil'
@@ -56,6 +57,11 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
   id: '/chat',
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/entrar': typeof EntrarRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/chat': typeof AuthenticatedChatRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
   '/editar-perfil': typeof AuthenticatedEditarPerfilRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/entrar': typeof EntrarRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/admin': typeof AuthenticatedAdminRoute
   '/chat': typeof AuthenticatedChatRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
   '/editar-perfil': typeof AuthenticatedEditarPerfilRoute
@@ -169,6 +177,7 @@ export interface FileRoutesById {
   '/entrar': typeof EntrarRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
   '/_authenticated/editar-perfil': typeof AuthenticatedEditarPerfilRoute
@@ -190,6 +199,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/saida'
     | '/sitemap.xml'
+    | '/admin'
     | '/chat'
     | '/configuracoes'
     | '/editar-perfil'
@@ -209,6 +219,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/saida'
     | '/sitemap.xml'
+    | '/admin'
     | '/chat'
     | '/configuracoes'
     | '/editar-perfil'
@@ -228,6 +239,7 @@ export interface FileRouteTypes {
     | '/entrar'
     | '/saida'
     | '/sitemap.xml'
+    | '/_authenticated/admin'
     | '/_authenticated/chat'
     | '/_authenticated/configuracoes'
     | '/_authenticated/editar-perfil'
@@ -294,6 +306,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/chat': {
       id: '/_authenticated/chat'
@@ -414,6 +433,7 @@ const AuthenticatedPerfilRouteWithChildren =
   AuthenticatedPerfilRoute._addFileChildren(AuthenticatedPerfilRouteChildren)
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRouteWithChildren
   AuthenticatedEditarPerfilRoute: typeof AuthenticatedEditarPerfilRoute
@@ -425,6 +445,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
   AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRouteWithChildren,
   AuthenticatedEditarPerfilRoute: AuthenticatedEditarPerfilRoute,

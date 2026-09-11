@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/context/profiles-context";
-import { accountTypes, type AccountType } from "@/lib/mock-data";
+import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/_authenticated/editar-perfil")({
   head: () => ({
@@ -28,10 +28,17 @@ function EditProfilePage() {
   const { current, updateCurrentProfile } = useProfiles();
   const [avatar, setAvatar] = useState(current.avatar ?? "");
   const [gender, setGender] = useState(current.gender ?? "");
+  const [orientation, setOrientation] = useState(current.orientation ?? "Heterossexual");
   const [nick, setNick] = useState(current.nick);
   const [type, setType] = useState<AccountType>(current.type);
   const [birthDate, setBirthDate] = useState(current.birthDate ?? "");
   const [city, setCity] = useState(current.city);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(
+    typeof current.latitude === "number" && typeof current.longitude === "number"
+      ? { lat: current.latitude, lon: current.longitude }
+      : null,
+  );
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [bio, setBio] = useState(current.bio);
   const [lookingFor, setLookingFor] = useState<AccountType[]>(current.lookingFor ?? []);
 
@@ -52,6 +59,29 @@ function EditProfilePage() {
     event.target.value = "";
   };
 
+  const handleCityBlur = async () => {
+    if (!city.trim()) {
+      return;
+    }
+
+    setIsGeocoding(true);
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city.trim())}&limit=1`,
+      );
+      const data = await response.json();
+      if (Array.isArray(data) && data[0]) {
+        setCoords({ lat: Number(data[0].lat), lon: Number(data[0].lon) });
+      } else {
+        setCoords(null);
+      }
+    } catch {
+      setCoords(null);
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
   const saveProfile = () => {
     if (!nick.trim()) {
       toast.error("Informe um nome para o perfil");
@@ -64,12 +94,15 @@ function EditProfilePage() {
     updateCurrentProfile({
       avatar,
       gender,
+      orientation,
       nick: nick.trim(),
       type,
       birthDate,
       city: city.trim(),
       bio: bio.trim(),
       lookingFor,
+      latitude: coords?.lat,
+      longitude: coords?.lon,
     });
     toast.success("Perfil atualizado");
     navigate({ to: "/configuracoes" });
@@ -127,6 +160,23 @@ function EditProfilePage() {
           </div>
 
           <div>
+            <Label className="text-sm">Orientação sexual</Label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {sexualOrientationOptions.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={orientation === option}
+                  onClick={() => setOrientation(option)}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${orientation === option ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <Label htmlFor="profile-name" className="text-sm">Nome do perfil</Label>
             <Input id="profile-name" value={nick} onChange={(event) => setNick(event.target.value)} className="mt-2 border-border bg-surface" />
           </div>
@@ -157,7 +207,16 @@ function EditProfilePage() {
             <Label htmlFor="profile-location" className="text-sm">Localização</Label>
             <div className="relative mt-2">
               <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Textarea id="profile-location" rows={2} value={city} onChange={(event) => setCity(event.target.value)} placeholder="Cidade, estado e região" className="border-border bg-surface pl-9" />
+              <Textarea
+                id="profile-location"
+                rows={2}
+                value={city}
+                onChange={(event) => setCity(event.target.value)}
+                onBlur={handleCityBlur}
+                placeholder="Cidade, estado e região"
+                className="border-border bg-surface pl-9"
+              />
+              {isGeocoding && <span className="mt-1 block text-xs text-muted-foreground">Buscando coordenadas...</span>}
             </div>
           </div>
 

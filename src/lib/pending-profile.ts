@@ -7,6 +7,9 @@ export type PendingProfile = {
   bio: string;
   hue: number;
   lookingFor: AccountType[];
+  orientation?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 const KEY = "conexao-privada:perfil-pendente";

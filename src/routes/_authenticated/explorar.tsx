@@ -41,7 +41,7 @@ export const Route = createFileRoute("/_authenticated/explorar")({
 const MAX_DISTANCE = 30;
 
 function ExplorePage() {
-  const { profiles } = useProfiles();
+  const { profiles, isBlocked } = useProfiles();
   const { isVip, openVipModal } = useVip();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<string[]>([]);
@@ -53,6 +53,7 @@ function ExplorePage() {
   const list = profiles
     .filter(
       (p) =>
+        !isBlocked(p.id) &&
         (filter.length === 0 || filter.includes(p.type)) &&
         (city === "Todas" || p.city === city) &&
         (lookingFor === "Todos" || (p.lookingFor ?? []).includes(lookingFor as AccountType)) &&

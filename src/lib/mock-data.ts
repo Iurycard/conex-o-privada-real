@@ -67,11 +67,16 @@ export type Profile = {
   bio: string;
   gender?: string;
   birthDate?: string;
+  latitude?: number;
+  longitude?: number;
   avatar?: string;
   cover?: string;
   lookingFor?: AccountType[];
   publicAlbum?: string[];
   privateAlbum?: string[];
+  role?: 'admin' | 'user';
+  status?: 'Ativo' | 'Suspenso';
+  isVerified?: boolean;
 };
 
 const U = (id: string) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=800&q=80`;
@@ -95,7 +100,7 @@ export const coverPool = [coverC1, coverC2, coverC3, coverC4, coverC5, coverC6, 
 export const albumPool = [album1, album2, album3, album4, album5, album6, album7, album8, album9, album10, album11, album12, album13, album14, album15, album16];
 
 
-function albumFrom(offset: number, count: number) {
+function albumFrom(offset: number, count: number) { 
   return Array.from(
     { length: count },
     (_, i) => albumPool[(offset + i) % albumPool.length]!,
@@ -121,14 +126,14 @@ export function randomCover() {
 }
 
 export const profiles: Profile[] = [
-  { id: "p1", nick: "L&M", type: "Casal (Ele/Ela)", city: "São Paulo, SP", distance: "2 km", distanceKm: 2, age: 34, vip: true, hue: 320, avatar: avA1, cover: coverC1, bio: "Casal discreto, gostamos de vinho, música e boas conversas.", lookingFor: ["Mulher Solteira", "Casal (Ele/Ela)"], publicAlbum: albumFrom(0, 6), privateAlbum: albumFrom(3, 4) },
-  { id: "p2", nick: "Aurora", type: "Mulher Solteira", city: "Campinas, SP", distance: "8 km", distanceKm: 8, age: 27, vip: false, hue: 285, avatar: avA2, cover: coverC2, bio: "Fotógrafa. Curto eventos, arte e gente sem papel.", lookingFor: ["Homem Solteiro", "Casal (Ele/Ela)"], publicAlbum: albumFrom(1, 6), privateAlbum: albumFrom(4, 4) },
-  { id: "p3", nick: "Duo Noir", type: "Casal (Ela/Ela)", city: "Santos, SP", distance: "14 km", distanceKm: 14, age: 31, vip: true, hue: 340, avatar: avA3, cover: coverC3, bio: "Praia, festa e privacidade acima de tudo.", lookingFor: ["Casal (Ela/Ela)", "Mulher Solteira"], publicAlbum: albumFrom(2, 6), privateAlbum: albumFrom(5, 4) },
-  { id: "p4", nick: "Vitor", type: "Homem Solteiro", city: "São Paulo, SP", distance: "5 km", distanceKm: 5, age: 29, vip: false, hue: 260, avatar: avA4, cover: coverC4, bio: "Chef nas horas vagas. Discrição é regra.", lookingFor: ["Mulher Solteira"], publicAlbum: albumFrom(3, 6), privateAlbum: albumFrom(6, 4) },
-  { id: "p5", nick: "Íris & Léo", type: "Casal (Ele/Ela)", city: "Guarulhos, SP", distance: "11 km", distanceKm: 11, age: 38, vip: false, hue: 300, avatar: avA5, cover: coverC5, bio: "Novos por aqui, sem pressa.", lookingFor: ["Casal (Ele/Ela)", "Homem Solteiro"], publicAlbum: albumFrom(4, 6), privateAlbum: albumFrom(7, 4) },
-  { id: "p6", nick: "R&D", type: "Casal (Ele/Ele)", city: "São Paulo, SP", distance: "3 km", distanceKm: 3, age: 42, vip: true, hue: 355, avatar: avA6, cover: coverC6, bio: "Amantes de eventos e boa companhia.", lookingFor: ["Casal (Ele/Ele)", "Homem Solteiro"], publicAlbum: albumFrom(5, 6), privateAlbum: albumFrom(8, 4) },
-  { id: "p7", nick: "Nina", type: "Mulher Solteira", city: "ABC Paulista", distance: "17 km", distanceKm: 17, age: 25, vip: false, hue: 270, avatar: avA7, cover: coverC7, bio: "Dança, viagens e conversas longas.", lookingFor: ["Homem Solteiro", "Mulher Solteira"], publicAlbum: albumFrom(6, 6), privateAlbum: albumFrom(9, 4) },
-  { id: "p8", nick: "Caio", type: "Homem Solteiro", city: "São Paulo, SP", distance: "6 km", distanceKm: 6, age: 36, vip: true, hue: 315, avatar: avA8, cover: coverC8, bio: "Colecionador de vinis e de bons encontros.", lookingFor: ["Mulher Solteira", "Casal (Ela/Ela)"], publicAlbum: albumFrom(7, 6), privateAlbum: albumFrom(10, 4) },
+  { id: "p1", nick: "L&M", type: "Casal (Ele/Ela)", city: "São Paulo, SP", distance: "2 km", distanceKm: 2, age: 34, vip: true, hue: 320, avatar: avA1, cover: coverC1, bio: "Casal discreto, gostamos de vinho, música e boas conversas.", lookingFor: ["Mulher Solteira", "Casal (Ele/Ela)"], publicAlbum: albumFrom(0, 6), privateAlbum: albumFrom(3, 4), role: "admin", status: "Ativo", isVerified: true },
+  { id: "p2", nick: "Aurora", type: "Mulher Solteira", city: "Campinas, SP", distance: "8 km", distanceKm: 8, age: 27, vip: false, hue: 285, avatar: avA2, cover: coverC2, bio: "Fotógrafa. Curto eventos, arte e gente sem papel.", lookingFor: ["Homem Solteiro", "Casal (Ele/Ela)"], publicAlbum: albumFrom(1, 6), privateAlbum: albumFrom(4, 4), role: "user", status: "Ativo", isVerified: true },
+  { id: "p3", nick: "Duo Noir", type: "Casal (Ela/Ela)", city: "Santos, SP", distance: "14 km", distanceKm: 14, age: 31, vip: true, hue: 340, avatar: avA3, cover: coverC3, bio: "Praia, festa e privacidade acima de tudo.", lookingFor: ["Casal (Ela/Ela)", "Mulher Solteira"], publicAlbum: albumFrom(2, 6), privateAlbum: albumFrom(5, 4), role: "user", status: "Ativo", isVerified: false },
+  { id: "p4", nick: "Vitor", type: "Homem Solteiro", city: "São Paulo, SP", distance: "5 km", distanceKm: 5, age: 29, vip: false, hue: 260, avatar: avA4, cover: coverC4, bio: "Chef nas horas vagas. Discrição é regra.", lookingFor: ["Mulher Solteira"], publicAlbum: albumFrom(3, 6), privateAlbum: albumFrom(6, 4), role: "user", status: "Ativo", isVerified: false },
+  { id: "p5", nick: "Íris & Léo", type: "Casal (Ele/Ela)", city: "Guarulhos, SP", distance: "11 km", distanceKm: 11, age: 38, vip: false, hue: 300, avatar: avA5, cover: coverC5, bio: "Novos por aqui, sem pressa.", lookingFor: ["Casal (Ele/Ela)", "Homem Solteiro"], publicAlbum: albumFrom(4, 6), privateAlbum: albumFrom(7, 4), role: "user", status: "Ativo", isVerified: false },
+  { id: "p6", nick: "R&D", type: "Casal (Ele/Ele)", city: "São Paulo, SP", distance: "3 km", distanceKm: 3, age: 42, vip: true, hue: 355, avatar: avA6, cover: coverC6, bio: "Amantes de eventos e boa companhia.", lookingFor: ["Casal (Ele/Ele)", "Homem Solteiro"], publicAlbum: albumFrom(5, 6), privateAlbum: albumFrom(8, 4), role: "user", status: "Ativo", isVerified: true },
+  { id: "p7", nick: "Nina", type: "Mulher Solteira", city: "ABC Paulista", distance: "17 km", distanceKm: 17, age: 25, vip: false, hue: 270, avatar: avA7, cover: coverC7, bio: "Dança, viagens e conversas longas.", lookingFor: ["Homem Solteiro", "Mulher Solteira"], publicAlbum: albumFrom(6, 6), privateAlbum: albumFrom(9, 4), role: "user", status: "Ativo", isVerified: false },
+  { id: "p8", nick: "Caio", type: "Homem Solteiro", city: "São Paulo, SP", distance: "6 km", distanceKm: 6, age: 36, vip: true, hue: 315, avatar: avA8, cover: coverC8, bio: "Colecionador de vinis e de bons encontros.", lookingFor: ["Mulher Solteira", "Casal (Ela/Ela)"], publicAlbum: albumFrom(7, 6), privateAlbum: albumFrom(10, 4), role: "user", status: "Ativo", isVerified: true },
 ];
 
 export type Post = {
@@ -141,6 +146,13 @@ export type Post = {
   media: "foto" | "video";
   image?: string;
 };
+export const sexualOrientationOptions = [
+  { value: "heterossexual", label: "Heterossexual" },
+  { value: "homossexual", label: "Homossexual" },
+  { value: "bissexual", label: "Bissexual" },
+  { value: "pansexual", label: "Pansexual" },
+  { value: "outros", label: "Outros" },
+];
 
 export const postImagePool = [postF1, postF2, postF3, postF4, postF5];
 
@@ -214,6 +226,61 @@ export const messages: Record<string, { from: "me" | "them"; text: string; time:
   ],
 };
 
-export function profileById(id: string) {
+export function profileById(id: string) { 
   return profiles.find((p) => p.id === id) ?? profiles[0]!;
 }
+
+export type Report = {
+  id: string;
+  reporterName: string;
+  targetType: 'Perfil' | 'Post';
+  reason: string;
+  reportedContent: string;
+  status: 'pending' | 'resolved' | 'ignored';
+};
+
+export type RecentMedia = {
+  id: string;
+  mediaUrl: string;
+  mediaType: 'image' | 'video';
+  ownerName: string;
+  createdAt: string;
+};
+
+export const mockReports: Report[] = [
+  {
+    id: "r1",
+    reporterName: "Aurora",
+    targetType: "Perfil",
+    reason: "Linguagem imprópria na bio",
+    reportedContent: "Perfil de Vitor - Bio com termos ofensivos",
+    status: "pending"
+  },
+  {
+    id: "r2",
+    reporterName: "Caio",
+    targetType: "Post",
+    reason: "Spam / Propaganda comercial",
+    reportedContent: "Post de Duo Noir - 'Compre ingressos no link pirata...'",
+    status: "pending"
+  },
+  {
+    id: "r3",
+    reporterName: "Nina",
+    targetType: "Perfil",
+    reason: "Falsidade ideológica",
+    reportedContent: "Perfil de Íris & Léo - Fotos fakes do Instagram",
+    status: "pending"
+  }
+];
+
+export const mockRecentMedia: RecentMedia[] = [
+  { id: "m1", mediaUrl: album1, mediaType: "image", ownerName: "L&M", createdAt: "há 5 min" },
+  { id: "m2", mediaUrl: album2, mediaType: "image", ownerName: "Aurora", createdAt: "há 12 min" },
+  { id: "m3", mediaUrl: album3, mediaType: "image", ownerName: "Duo Noir", createdAt: "há 25 min" },
+  { id: "m4", mediaUrl: album4, mediaType: "image", ownerName: "Vitor", createdAt: "há 1 h" },
+  { id: "m5", mediaUrl: album5, mediaType: "image", ownerName: "Íris & Léo", createdAt: "há 2 h" },
+  { id: "m6", mediaUrl: album6, mediaType: "image", ownerName: "R&D", createdAt: "há 3 h" },
+  { id: "m7", mediaUrl: album7, mediaType: "image", ownerName: "Nina", createdAt: "há 4 h" },
+  { id: "m8", mediaUrl: album8, mediaType: "image", ownerName: "Caio", createdAt: "há 5 h" },
+];

@@ -100,7 +100,7 @@ function Landing() {
             Conexão <span className="text-primary-glow">Privada</span>
           </span>
         </div>
-        <Link to="/feed" className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground shadow-neon transition-all hover:opacity-90 hover:shadow-lg sm:w-auto">
+        <Link to="/entrar" className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground shadow-neon transition-all hover:opacity-90 hover:shadow-lg sm:w-auto">
           Entrar
         </Link>
       </header>
@@ -128,7 +128,7 @@ function Landing() {
                 Criar Perfil Discreto <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
-                to="/feed"
+                to="/entrar"
                 className="inline-flex w-full items-center justify-center rounded-full border border-border bg-surface px-7 py-3.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-2 sm:w-auto"
               >
                 Já tenho conta
@@ -227,7 +227,7 @@ function Landing() {
               </p>
             </div>
             <Link
-              to="/feed"
+              to="/entrar"
               className="rounded-full bg-gradient-gold px-6 py-3 text-sm font-semibold text-gold-foreground shadow-gold transition-opacity hover:opacity-90"
             >
               Conhecer benefícios
@@ -248,7 +248,7 @@ function Landing() {
               Criar Perfil Discreto <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
-              to="/feed"
+              to="/entrar"
               className="inline-flex w-full items-center justify-center rounded-full border border-border bg-surface px-7 py-3.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-2 sm:w-auto"
             >
               Explorar como visitante
