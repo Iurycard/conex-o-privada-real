@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { VipProvider } from "@/context/vip";
 import { ProfilesProvider } from "@/context/profiles-context";
 import { AuthProvider } from "@/hooks/use-auth";
+import { SocialProvider } from "@/hooks/use-social";
 import { VipModal } from "@/components/vip-modal";
 import { Toaster } from "@/components/ui/sonner";
 import { reportLovableError } from "@/lib/lovable-error-reporting";
@@ -133,10 +134,12 @@ function RootComponent() {
       <AuthProvider>
         <VipProvider>
           <ProfilesProvider>
-            {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-            <Outlet />
-            <VipModal />
-            <Toaster position="top-center" />
+            <SocialProvider>
+              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+              <Outlet />
+              <VipModal />
+              <Toaster position="top-center" />
+            </SocialProvider>
           </ProfilesProvider>
         </VipProvider>
       </AuthProvider>

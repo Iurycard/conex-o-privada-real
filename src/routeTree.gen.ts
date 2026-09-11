@@ -26,6 +26,7 @@ import { Route as AuthenticatedNotificacoesRouteImport } from './routes/_authent
 import { Route as AuthenticatedPerfilRouteImport } from './routes/_authenticated/perfil'
 import { Route as AuthenticatedConfiguracoesAmigosRouteImport } from './routes/_authenticated/configuracoes.amigos'
 import { Route as AuthenticatedConfiguracoesBloqueadosRouteImport } from './routes/_authenticated/configuracoes.bloqueados'
+import { Route as AuthenticatedEventosIdRouteImport } from './routes/_authenticated/eventos.$id'
 import { Route as AuthenticatedPerfilIndexRouteImport } from './routes/_authenticated/perfil.index'
 import { Route as AuthenticatedPerfilIdRouteImport } from './routes/_authenticated/perfil.$id'
 
@@ -118,6 +119,11 @@ const AuthenticatedConfiguracoesBloqueadosRoute =
     path: '/bloqueados',
     getParentRoute: () => AuthenticatedConfiguracoesRoute,
   } as any)
+const AuthenticatedEventosIdRoute = AuthenticatedEventosIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AuthenticatedEventosRoute,
+} as any)
 const AuthenticatedPerfilIndexRoute =
   AuthenticatedPerfilIndexRouteImport.update({
     id: '/',
@@ -140,13 +146,14 @@ export interface FileRoutesByFullPath {
   '/chat': typeof AuthenticatedChatRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
   '/editar-perfil': typeof AuthenticatedEditarPerfilRoute
-  '/eventos': typeof AuthenticatedEventosRoute
+  '/eventos': typeof AuthenticatedEventosRouteWithChildren
   '/explorar': typeof AuthenticatedExplorarRoute
   '/feed': typeof AuthenticatedFeedRoute
   '/notificacoes': typeof AuthenticatedNotificacoesRoute
   '/perfil': typeof AuthenticatedPerfilRouteWithChildren
   '/configuracoes/amigos': typeof AuthenticatedConfiguracoesAmigosRoute
   '/configuracoes/bloqueados': typeof AuthenticatedConfiguracoesBloqueadosRoute
+  '/eventos/$id': typeof AuthenticatedEventosIdRoute
   '/perfil/$id': typeof AuthenticatedPerfilIdRoute
   '/perfil/': typeof AuthenticatedPerfilIndexRoute
 }
@@ -160,12 +167,13 @@ export interface FileRoutesByTo {
   '/chat': typeof AuthenticatedChatRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
   '/editar-perfil': typeof AuthenticatedEditarPerfilRoute
-  '/eventos': typeof AuthenticatedEventosRoute
+  '/eventos': typeof AuthenticatedEventosRouteWithChildren
   '/explorar': typeof AuthenticatedExplorarRoute
   '/feed': typeof AuthenticatedFeedRoute
   '/notificacoes': typeof AuthenticatedNotificacoesRoute
   '/configuracoes/amigos': typeof AuthenticatedConfiguracoesAmigosRoute
   '/configuracoes/bloqueados': typeof AuthenticatedConfiguracoesBloqueadosRoute
+  '/eventos/$id': typeof AuthenticatedEventosIdRoute
   '/perfil/$id': typeof AuthenticatedPerfilIdRoute
   '/perfil': typeof AuthenticatedPerfilIndexRoute
 }
@@ -181,13 +189,14 @@ export interface FileRoutesById {
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
   '/_authenticated/editar-perfil': typeof AuthenticatedEditarPerfilRoute
-  '/_authenticated/eventos': typeof AuthenticatedEventosRoute
+  '/_authenticated/eventos': typeof AuthenticatedEventosRouteWithChildren
   '/_authenticated/explorar': typeof AuthenticatedExplorarRoute
   '/_authenticated/feed': typeof AuthenticatedFeedRoute
   '/_authenticated/notificacoes': typeof AuthenticatedNotificacoesRoute
   '/_authenticated/perfil': typeof AuthenticatedPerfilRouteWithChildren
   '/_authenticated/configuracoes/amigos': typeof AuthenticatedConfiguracoesAmigosRoute
   '/_authenticated/configuracoes/bloqueados': typeof AuthenticatedConfiguracoesBloqueadosRoute
+  '/_authenticated/eventos/$id': typeof AuthenticatedEventosIdRoute
   '/_authenticated/perfil/$id': typeof AuthenticatedPerfilIdRoute
   '/_authenticated/perfil/': typeof AuthenticatedPerfilIndexRoute
 }
@@ -210,6 +219,7 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/configuracoes/amigos'
     | '/configuracoes/bloqueados'
+    | '/eventos/$id'
     | '/perfil/$id'
     | '/perfil/'
   fileRoutesByTo: FileRoutesByTo
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/notificacoes'
     | '/configuracoes/amigos'
     | '/configuracoes/bloqueados'
+    | '/eventos/$id'
     | '/perfil/$id'
     | '/perfil'
   id:
@@ -250,6 +261,7 @@ export interface FileRouteTypes {
     | '/_authenticated/perfil'
     | '/_authenticated/configuracoes/amigos'
     | '/_authenticated/configuracoes/bloqueados'
+    | '/_authenticated/eventos/$id'
     | '/_authenticated/perfil/$id'
     | '/_authenticated/perfil/'
   fileRoutesById: FileRoutesById
@@ -384,6 +396,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConfiguracoesBloqueadosRouteImport
       parentRoute: typeof AuthenticatedConfiguracoesRoute
     }
+    '/_authenticated/eventos/$id': {
+      id: '/_authenticated/eventos/$id'
+      path: '/$id'
+      fullPath: '/eventos/$id'
+      preLoaderRoute: typeof AuthenticatedEventosIdRouteImport
+      parentRoute: typeof AuthenticatedEventosRoute
+    }
     '/_authenticated/perfil/': {
       id: '/_authenticated/perfil/'
       path: '/'
@@ -419,6 +438,17 @@ const AuthenticatedConfiguracoesRouteWithChildren =
     AuthenticatedConfiguracoesRouteChildren,
   )
 
+interface AuthenticatedEventosRouteChildren {
+  AuthenticatedEventosIdRoute: typeof AuthenticatedEventosIdRoute
+}
+
+const AuthenticatedEventosRouteChildren: AuthenticatedEventosRouteChildren = {
+  AuthenticatedEventosIdRoute: AuthenticatedEventosIdRoute,
+}
+
+const AuthenticatedEventosRouteWithChildren =
+  AuthenticatedEventosRoute._addFileChildren(AuthenticatedEventosRouteChildren)
+
 interface AuthenticatedPerfilRouteChildren {
   AuthenticatedPerfilIdRoute: typeof AuthenticatedPerfilIdRoute
   AuthenticatedPerfilIndexRoute: typeof AuthenticatedPerfilIndexRoute
@@ -437,7 +467,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedConfiguracoesRoute: typeof AuthenticatedConfiguracoesRouteWithChildren
   AuthenticatedEditarPerfilRoute: typeof AuthenticatedEditarPerfilRoute
-  AuthenticatedEventosRoute: typeof AuthenticatedEventosRoute
+  AuthenticatedEventosRoute: typeof AuthenticatedEventosRouteWithChildren
   AuthenticatedExplorarRoute: typeof AuthenticatedExplorarRoute
   AuthenticatedFeedRoute: typeof AuthenticatedFeedRoute
   AuthenticatedNotificacoesRoute: typeof AuthenticatedNotificacoesRoute
@@ -449,7 +479,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedConfiguracoesRoute: AuthenticatedConfiguracoesRouteWithChildren,
   AuthenticatedEditarPerfilRoute: AuthenticatedEditarPerfilRoute,
-  AuthenticatedEventosRoute: AuthenticatedEventosRoute,
+  AuthenticatedEventosRoute: AuthenticatedEventosRouteWithChildren,
   AuthenticatedExplorarRoute: AuthenticatedExplorarRoute,
   AuthenticatedFeedRoute: AuthenticatedFeedRoute,
   AuthenticatedNotificacoesRoute: AuthenticatedNotificacoesRoute,
