@@ -23,9 +23,9 @@ export type NewProfileInput = {
   bio: string;
   hue: number;
   lookingFor?: AccountType[];
-  orientation?: string;
-  latitude?: number;
-  longitude?: number;
+  orientation?: string | undefined;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 const BLOCKED_STORAGE_KEY = "conexao-privada.blockedIds";
@@ -34,8 +34,8 @@ const POSTS_STORAGE_KEY = "conexao-privada.posts";
 type ProfilesContextValue = {
   profiles: Profile[];
   posts: Post[];
-  currentId: string;
-  current: Profile;
+  currentId: string | null;
+  current: Profile | null;
   setCurrentId: (id: string) => void;
   getProfile: (id: string) => Profile | undefined;
   addProfile: (input: NewProfileInput) => Promise<string>;
@@ -57,7 +57,7 @@ const ProfilesContext = createContext<ProfilesContextValue | null>(null);
 export function ProfilesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [dbProfiles, setDbProfiles] = useState<Profile[]>([]);
-  const [localProfiles, setLocalProfiles] = useState<Profile[]>(seedProfiles);
+  const [localProfiles, setLocalProfiles] = useState<Profile[]>([]);
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === "undefined") return seedPosts;
 
@@ -70,7 +70,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       return seedPosts;
     }
   });
-  const [fallbackId, setFallbackId] = useState<string>(seedProfiles[0]!.id);
+  const [fallbackId, setFallbackId] = useState<string | null>(null);
   const [following, setFollowing] = useState<Record<string, boolean>>({});
   const [blockedIds, setBlockedIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
@@ -117,9 +117,9 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           city: pending.city,
           bio: pending.bio,
           hue: pending.hue,
+          orientation: pending.orientation ?? null,
           avatar: randomAvatar(),
           cover: randomCover(),
-          orientation: pending.orientation ?? null,
           latitude: pending.latitude ?? null,
           longitude: pending.longitude ?? null,
           looking_for: pending.lookingFor,
@@ -146,7 +146,8 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
     return [...dbProfiles, ...localProfiles.filter((p) => !dbIds.has(p.id))];
   }, [dbProfiles, localProfiles]);
 
-  const currentId = user && dbProfiles.some((p) => p.id === user.id) ? user.id : fallbackId;
+  const currentId = user?.id || fallbackId;
+  const current = profiles.find((p) => p.id === currentId) || null;
 
   const value = useMemo<ProfilesContextValue>(() => {
     const getProfile = (id: string) => profiles.find((p) => p.id === id);
@@ -158,7 +159,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       profiles,
       posts,
       currentId,
-      current: getProfile(currentId) ?? profiles[0]!,
+      current: currentId ? (getProfile(currentId) ?? null) : null,
       setCurrentId: setFallbackId,
       getProfile,
       addProfile: async (input) => {
@@ -231,7 +232,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
 
         const createdPost: Post = {
           id: `post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          authorId: authorId ?? currentId,
+          authorId: authorId ?? currentId ?? "",
           time: "agora",
           text: message || "Nova publicação",
           likes: 0,

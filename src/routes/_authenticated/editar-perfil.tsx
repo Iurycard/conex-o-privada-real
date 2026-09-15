@@ -1,13 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Camera, MapPin, ShieldCheck } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { AvatarOrb } from "@/components/bits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useProfiles } from "@/context/profiles-context";
 import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/_authenticated/editar-perfil")({
@@ -25,22 +26,70 @@ const genderOptions = ["Mulher", "Homem", "Não binário", "Casal"];
 
 function EditProfilePage() {
   const navigate = useNavigate();
-  const { current, updateCurrentProfile } = useProfiles();
-  const [avatar, setAvatar] = useState(current.avatar ?? "");
-  const [gender, setGender] = useState(current.gender ?? "");
-  const [orientation, setOrientation] = useState(current.orientation ?? "Heterossexual");
-  const [nick, setNick] = useState(current.nick);
-  const [type, setType] = useState<AccountType>(current.type);
-  const [birthDate, setBirthDate] = useState(current.birthDate ?? "");
-  const [city, setCity] = useState(current.city);
-  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(
-    typeof current.latitude === "number" && typeof current.longitude === "number"
-      ? { lat: current.latitude, lon: current.longitude }
-      : null,
-  );
-  const [isGeocoding, setIsGeocoding] = useState(false);
-  const [bio, setBio] = useState(current.bio);
-  const [lookingFor, setLookingFor] = useState<AccountType[]>(current.lookingFor ?? []);
+  const [avatar, setAvatar] = useState("");
+  const [gender, setGender] = useState("");
+  const [orientation, setOrientation] = useState("");
+  const [nick, setNick] = useState("");
+  const [type, setType] = useState<AccountType | "">("");
+  const [birthDate, setBirthDate] = useState("");
+  const [city, setCity] = useState("");
+  const [selectedUf, setSelectedUf] = useState("");
+  const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
+  const [cidades, setCidades] = useState<{ id: number; nome: string }[]>([]); 
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [bio, setBio] = useState("");
+  const [lookingFor, setLookingFor] = useState<AccountType[]>([]);
+
+  // 1. Carrega os estados do Brasil ao abrir a tela
+useEffect(() => {
+  fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome")
+    .then((res) => res.json())
+    .then((data) => setUfs(data))
+    .catch(() => {});
+}, []);
+
+// 2. Carrega as cidades assim que o estado (UF) é selecionado
+useEffect(() => {
+  if (!selectedUf) {
+    setCidades([]);
+    return;
+  }
+  fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${selectedUf}/municipios?orderBy=nome`)
+    .then((res) => res.json())
+    .then((data) => setCidades(data))
+    .catch(() => {});
+}, [selectedUf]);
+
+// 3. Carrega os dados do perfil do Supabase e preenche os campos
+useEffect(() => {
+  async function loadProfile() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (data) {
+      setNick(data.nick || "");
+      setGender(data.gender || "");
+      setOrientation(data.orientation || "");
+      setType((data.type as AccountType) || "");
+      setBio(data.bio || "");
+      setCity(data.city || "");
+      setAvatar(data.avatar || "");
+      setLookingFor((data.looking_for as AccountType[]) || []);
+
+      if (data.city && data.city.includes(" - ")) {
+        const parts = data.city.split(" - ");
+        setSelectedUf(parts[parts.length - 1] || "");
+      }
+    }
+  }
+  loadProfile();
+}, []);
 
   const toggleLooking = (option: AccountType) => {
     setLookingFor((selected) => selected.includes(option)
@@ -51,6 +100,7 @@ function EditProfilePage() {
   const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setAvatarFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") setAvatar(reader.result);
@@ -59,54 +109,60 @@ function EditProfilePage() {
     event.target.value = "";
   };
 
-  const handleCityBlur = async () => {
-    if (!city.trim()) {
-      return;
-    }
 
-    setIsGeocoding(true);
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city.trim())}&limit=1`,
-      );
-      const data = await response.json();
-      if (Array.isArray(data) && data[0]) {
-        setCoords({ lat: Number(data[0].lat), lon: Number(data[0].lon) });
-      } else {
-        setCoords(null);
-      }
-    } catch {
-      setCoords(null);
-    } finally {
-      setIsGeocoding(false);
-    }
-  };
 
-  const saveProfile = () => {
-    if (!nick.trim()) {
-      toast.error("Informe um nome para o perfil");
-      return;
+const saveProfile = async () => {
+  if (!nick.trim()) {
+    toast.error("Informe um nome para o perfil");
+    return;
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    toast.error("Usuário não autenticado");
+    return;
+  }
+
+  let finalAvatarUrl = avatar;
+
+  // Se houver nova foto, faz o upload para o Storage
+  if (avatarFile) {
+    const fileExt = avatarFile.name.split(".").pop();
+    const filePath = `${user.id}/avatar.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(filePath, avatarFile, { upsert: true });
+
+    if (!uploadError) {
+      const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      finalAvatarUrl = data.publicUrl;
     }
-    if (!gender) {
-      toast.error("Selecione o gênero do perfil");
-      return;
-    }
-    updateCurrentProfile({
-      avatar,
+  }
+
+  // Atualiza no Supabase salvando apenas a cidade formatada ("Cidade - UF")
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      nick: nick.trim(),
       gender,
       orientation,
-      nick: nick.trim(),
       type,
-      birthDate,
-      city: city.trim(),
+      city,
       bio: bio.trim(),
-      lookingFor,
-      latitude: coords?.lat,
-      longitude: coords?.lon,
-    });
-    toast.success("Perfil atualizado");
-    navigate({ to: "/configuracoes" });
-  };
+      avatar: finalAvatarUrl,
+      looking_for: lookingFor,
+    })
+    .eq("id", user.id);
+
+  if (error) {
+    toast.error("Erro ao atualizar perfil");
+    console.error(error);
+  } else {
+    toast.success("Perfil atualizado com sucesso!");
+    navigate({ to: "/perfil" });
+  }
+};
 
   return (
     <div className="min-h-screen bg-background">
@@ -128,7 +184,13 @@ function EditProfilePage() {
             {avatar ? (
               <img src={avatar} alt={`Imagem de perfil de ${nick}`} className="h-20 w-20 rounded-full object-cover" />
             ) : (
-              <AvatarOrb profile={current} size={80} ring={false} />
+              <AvatarOrb 
+              profile={{ 
+                nick: nick || "usuário",
+                 avatar_url: avatar || "",
+                } as any} 
+                size={80} 
+                ring={false} />
             )}
             <label className="absolute bottom-0 right-0 grid h-8 w-8 cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground shadow-lg">
               <Camera className="h-4 w-4" />
@@ -164,13 +226,13 @@ function EditProfilePage() {
             <div className="mt-2 flex flex-wrap gap-2">
               {sexualOrientationOptions.map((option) => (
                 <button
-                  key={option}
+                  key={option.value}
                   type="button"
-                  aria-pressed={orientation === option}
-                  onClick={() => setOrientation(option)}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${orientation === option ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
+                  aria-pressed={orientation === option.value}
+                  onClick={() => setOrientation(option.value)}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${orientation === option.value ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
                 >
-                  {option}
+                  {option.value}
                 </button>
               ))}
             </div>
@@ -203,22 +265,50 @@ function EditProfilePage() {
             <Input id="birth-date" type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} className="mt-2 border-border bg-surface" />
           </div>
 
-          <div>
-            <Label htmlFor="profile-location" className="text-sm">Localização</Label>
-            <div className="relative mt-2">
-              <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Textarea
-                id="profile-location"
-                rows={2}
-                value={city}
-                onChange={(event) => setCity(event.target.value)}
-                onBlur={handleCityBlur}
-                placeholder="Cidade, estado e região"
-                className="border-border bg-surface pl-9"
-              />
-              {isGeocoding && <span className="mt-1 block text-xs text-muted-foreground">Buscando coordenadas...</span>}
-            </div>
-          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+  {/* Select de Estado */}
+  <div className="space-y-2">
+    <Label htmlFor="uf">Estado (UF)</Label>
+    <select
+      id="uf"
+      value={selectedUf}
+      onChange={(e) => setSelectedUf(e.target.value)}
+      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+    >
+      <option value="">Selecione o estado</option>
+      {ufs.map((uf) => (
+        <option key={uf.sigla} value={uf.sigla}>
+          {uf.nome} ({uf.sigla})
+        </option>
+      ))}
+    </select>
+  </div>
+
+  {/* Select de Cidade */}
+  <div className="space-y-2">
+    <Label htmlFor="city">Cidade</Label>
+    <select
+      id="city"
+      disabled={!selectedUf}
+      value={city.includes(" - ") ? city.split(" - ") : city}
+      onChange={(e) => {
+        if (e.target.value) {
+          setCity(`${e.target.value} - ${selectedUf}`);
+        }
+      }}
+      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary"
+    >
+      <option value="">
+        {selectedUf ? "Selecione a cidade" : "Escolha o estado primeiro"}
+      </option>
+      {cidades.map((cidade) => (
+        <option key={cidade.id} value={cidade.nome}>
+          {cidade.nome}
+        </option>
+      ))}
+    </select>
+  </div>
+</div>
 
           <div>
             <Label htmlFor="profile-description" className="text-sm">Descrição do perfil</Label>

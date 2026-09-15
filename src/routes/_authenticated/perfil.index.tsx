@@ -21,7 +21,11 @@ function ProfilePage() {
   const { current } = useProfiles();
   return (
     <AppShell>
-      <ProfileView profile={current} isOwner />
+      {current ? (
+  <ProfileView profile={current} isOwner />
+) : (
+  <div className="p-4 text-center">Carregando perfil...</div>
+)}
     </AppShell>
   );
 }

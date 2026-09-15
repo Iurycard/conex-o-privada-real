@@ -291,6 +291,7 @@ export type Database = {
           cover: string | null
           created_at: string
           gender: string | null
+          orientation: string | null
           hue: number
           id: string
           latitude: number | null
@@ -311,6 +312,7 @@ export type Database = {
           cover?: string | null
           created_at?: string
           gender?: string | null
+          orientation?: string | null
           hue?: number
           id: string
           latitude?: number | null
@@ -331,6 +333,7 @@ export type Database = {
           cover?: string | null
           created_at?: string
           gender?: string | null
+          orientation?: string | null
           hue?: number
           id?: string
           latitude?: number | null

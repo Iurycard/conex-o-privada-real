@@ -116,8 +116,33 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
   const [galleryComments, setGalleryComments] = useState<Record<number, number>>({ 0: 16, 1: 11, 2: 18, 3: 14, 4: 22, 5: 17 });
   const [likesModalOpen, setLikesModalOpen] = useState(false);
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
+  const { current } = useProfiles();
+  const activeProfile = profile ?? current;
+  const publicUrls = useAlbumUrls(activeProfile?.publicAlbum ??[]);
+  const privateUrls = useAlbumUrls(activeProfile?.privateAlbum ?? []);
 
-  const blocked = isBlocked(profile.id);
+   useEffect(() => {
+    if (!isOwner && user && profile.id !== user.id) void social.registerVisit(profile.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id, isOwner, user?.id]);
+
+  const stats = useMemo(
+    () => ({
+      views: seeded(profile.id + "v", 8000, 60000),
+      memberMonth: meses[seeded(profile.id + "m", 0, 11)]!,
+      memberYear: 2021 + seeded(profile.id + "y", 0, 4),
+      onlineHours: seeded(profile.id + "o", 1, 22),
+    }),
+    [profile.id],
+  );
+
+ 
+  
+  if (!current) {
+    return <div className="p-8 text-center text-muted-foreground">Carregando perfil...</div> 
+  }
+  const targetProfileId = profile?.id ??current?.id;
+   const blocked = targetProfileId ? isBlocked(targetProfileId) : false;
 
   if (blocked) {
     return (
@@ -159,24 +184,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
   const access = social.albumAccess(profile.id);
   const canViewPrivateAlbum = isOwner || access === "approved";
   const following = social.isFollowing(profile.id);
+ 
+ 
 
-  const publicUrls = useAlbumUrls(profile.publicAlbum);
-  const privateUrls = useAlbumUrls(canViewPrivateAlbum ? profile.privateAlbum : undefined);
-
-  useEffect(() => {
-    if (!isOwner && user && profile.id !== user.id) void social.registerVisit(profile.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.id, isOwner, user?.id]);
-
-  const stats = useMemo(
-    () => ({
-      views: seeded(profile.id + "v", 8000, 60000),
-      memberMonth: meses[seeded(profile.id + "m", 0, 11)]!,
-      memberYear: 2021 + seeded(profile.id + "y", 0, 4),
-      onlineHours: seeded(profile.id + "o", 1, 22),
-    }),
-    [profile.id],
-  );
+ 
 
   const followersIds = social.followersOf(profile.id);
   const followingIds = social.followingOf(profile.id);

@@ -1,10 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ArrowLeft, Mail, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/use-auth";
+import { useProfiles } from "@/context/profiles-context";
+import { readPendingProfile, clearPendingProfile } from "@/lib/pending-profile";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -24,14 +26,11 @@ export const Route = createFileRoute("/entrar")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
+  const { addProfile } = useProfiles();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!loading && user) navigate({ to: "/feed", replace: true });
-  }, [loading, user, navigate]);
 
   const signIn = async () => {
     if (!email.trim() || !password) {
@@ -39,22 +38,40 @@ function LoginPage() {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
     setBusy(false);
+
     if (error) {
       toast.error(
         error.message.includes("Invalid login")
           ? "E-mail ou senha incorretos"
-          : "Não foi possível entrar. Tente novamente.",
+          : "Não foi possível entrar. Tente novamente."
       );
       return;
     }
+
+    // Processa perfil pendente retido no cadastro local
+    const pending = readPendingProfile();
+    if (pending && data.user) {
+      try {
+        await addProfile(pending);
+        clearPendingProfile();
+      } catch (err) {
+        console.error("Erro ao criar perfil pendente:", err);
+      }
+    }
+
     toast.success("Bem-vindo de volta");
     navigate({ to: "/feed" });
   };
 
   const signInWithGoogle = async () => {
-    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: window.location.origin,
+    });
     if (result.error) {
       toast.error("Não foi possível entrar com o Google");
       return;
@@ -82,7 +99,9 @@ function LoginPage() {
 
         <div className="mt-8 space-y-4">
           <div>
-            <Label htmlFor="email" className="text-sm">E-mail</Label>
+            <Label htmlFor="email" className="text-sm">
+              E-mail
+            </Label>
             <div className="relative mt-2">
               <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -98,7 +117,9 @@ function LoginPage() {
           </div>
 
           <div>
-            <Label htmlFor="password" className="text-sm">Senha</Label>
+            <Label htmlFor="password" className="text-sm">
+              Senha
+            </Label>
             <div className="relative mt-2">
               <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input

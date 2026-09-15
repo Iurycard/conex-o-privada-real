@@ -1,8 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import { ArrowLeft, ImagePlus, MapPin, ShieldCheck } from "lucide-react";
 import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/mock-data";
 import { useProfiles } from "@/context/profiles-context";
+import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { savePendingProfile } from "@/lib/pending-profile";
@@ -11,7 +12,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-export async function getCityCoordinates(cityName: string): Promise<{ lat: number; lon: number } | null> { if (!cityName.trim()) return null; try { const response = await fetch( `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}&limit=1` ); const data = await response.json(); if (data && data.length > 0) { return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), }; } return null; } catch (error) { console.error("Erro ao buscar coordenadas da cidade:", error); return null; }}
 
 export const Route = createFileRoute("/cadastro")({
   head: () => ({
@@ -33,41 +33,47 @@ function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [city, setCity] = useState("");
+  const [selectedUf, setSelectedUf] = useState("");
+  const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
+  const [cidades, setCidades] = useState<{ id: number; nome: string }[]>([]); 
   const [orientation, setOrientation] = useState("Heterossexual");
   const [bio, setBio] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [lookingFor, setLookingFor] = useState<AccountType[]>([]);
   const [busy, setBusy] = useState(false);
   const { addProfile } = useProfiles();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
-const [isGeocoding, setIsGeocoding] = useState(false);
 
+    // 1. Carrega os estados do Brasil ao abrir a tela
+  useEffect(() => {
+    fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome")
+      .then((res) => res.json())
+      .then((data) => setUfs(data))
+      .catch(() => {});
+  }, []);
+  
+  // 2. Carrega as cidades assim que o estado (UF) é selecionado
+  useEffect(() => {
+    if (!selectedUf) {
+      setCidades([]);
+      return;
+    }
+    fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${selectedUf}/municipios?orderBy=nome`)
+      .then((res) => res.json())
+      .then((data) => setCidades(data))
+      .catch(() => {});
+  }, [selectedUf]);
+  
   const toggleLooking = (t: AccountType) =>
     setLookingFor((list) => (list.includes(t) ? list.filter((x) => x !== t) : [...list, t]));
-
-  const handleCityBlur = async () => {
-  if (!city.trim()) return;
-
-  setIsGeocoding(true);
-  const locationData = await getCityCoordinates(city);
-
-  if (locationData) {
-    setCoords(locationData);
-    console.log(`Coordenadas salvas para ${city}:`, locationData);
-  } else {
-    console.warn('Cidade não encontrada para gerar coordenadas.');
-  }
-  setIsGeocoding(false);
-};
 
   const handleSubmit = async () => {
     if (!nick.trim()) {
       toast.error("Escolha um apelido para o perfil");
       return;
     }
-
-    const payload = {
+  const payload = {
       nick,
       type,
       city,
@@ -75,8 +81,6 @@ const [isGeocoding, setIsGeocoding] = useState(false);
       hue: 300,
       lookingFor,
       orientation,
-      latitude: coords?.lat,
-      longitude: coords?.lon,
     };
 
     if (user) {
@@ -121,10 +125,10 @@ const [isGeocoding, setIsGeocoding] = useState(false);
       city: city.trim(),
       bio: bio.trim(),
       hue: 300,
-      lookingFor,
+      
+      lookingFor: lookingFor,
       orientation,
-      latitude: coords?.lat,
-      longitude: coords?.lon,
+      
     });
 
     if (data.session) {
@@ -191,10 +195,7 @@ const [isGeocoding, setIsGeocoding] = useState(false);
               </div>
             </>
           )}
-
-
-
-          <div>
+                 <div>
             <Label htmlFor="loc" className="text-sm">Localização</Label>
             <div className="relative mt-2">
               <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -202,26 +203,68 @@ const [isGeocoding, setIsGeocoding] = useState(false);
                 id="loc"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
-                onBlur={handleCityBlur}
+              
                 placeholder="Cidade, estado"
                 className="border-border bg-surface pl-9"
               />
-              {isGeocoding && <span className="mt-1 block text-xs text-muted-foreground">Buscando coordenadas...</span>}
+            
             </div>
           </div>
+ {/* Select de Estado */}
+  <div className="space-y-2">
+    <Label htmlFor="uf">Estado (UF)</Label>
+    <select
+      id="uf"
+      value={selectedUf}
+      onChange={(e) => setSelectedUf(e.target.value)}
+      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+    >
+      <option value="">Selecione o estado</option>
+      {ufs.map((uf) => (
+        <option key={uf.sigla} value={uf.sigla}>
+          {uf.nome} ({uf.sigla})
+        </option>
+      ))}
+    </select>
+  </div>
 
+  {/* Select de Cidade */}
+  <div className="space-y-2">
+    <Label htmlFor="city">Cidade</Label>
+    <select
+      id="city"
+      disabled={!selectedUf}
+      value={city.includes(" - ") ? city.split(" - ") : city}
+      onChange={(e) => {
+        if (e.target.value) {
+          setCity(`${e.target.value} - ${selectedUf}`);
+        }
+      }}
+      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary"
+    >
+      <option value="">
+        {selectedUf ? "Selecione a cidade" : "Escolha o estado primeiro"}
+      </option>
+      {cidades.map((cidade) => (
+        <option key={cidade.id} value={cidade.nome}>
+          {cidade.nome}
+        </option>
+      ))}
+    </select>
+  </div>
+  </section>
           <div>
             <Label className="text-sm">Orientação sexual</Label>
             <div className="mt-2 flex flex-wrap gap-2">
               {sexualOrientationOptions.map((option) => (
                 <button
-                  key={option}
+                  key={option.value}
                   type="button"
-                  aria-pressed={orientation === option}
-                  onClick={() => setOrientation(option)}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${orientation === option ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
+                  aria-pressed={orientation === option.value}
+                  onClick={() => setOrientation(option.value)}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${orientation === option.value ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
                 >
-                  {option}
+                  {option.value}
                 </button>
               ))}
             </div>
@@ -269,22 +312,38 @@ const [isGeocoding, setIsGeocoding] = useState(false);
           <div>
             <Label className="text-sm">Mídias</Label>
             <div className="mt-2 grid grid-cols-3 gap-2">
-              {[0, 1, 2].map((i) => (
-                <button
-                  key={i}
-                  onClick={() => toast("Upload simulado neste protótipo")}
-                  className="grid aspect-square place-items-center gap-1 rounded-xl border border-dashed border-border bg-surface text-muted-foreground hover:text-foreground"
-                >
-                  <ImagePlus className="h-5 w-5" />
-                  <span className="text-[10px]">{i === 0 ? "Capa" : "Foto"}</span>
-                </button>
-              ))}
-            </div>
+  {[0, 1, 2].map((i) => (
+    <label
+      key={i}
+      className="grid aspect-square cursor-pointer place-items-center gap-1 rounded-lg border border-dashed border-border hover:bg-accent/50"
+    >
+      {/* Input invisível que abre a janela de arquivos do computador/celular */}
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files[0]) {
+            // Se for o índice 0, salva como a foto principal/capa
+            if (i === 0) {
+              setAvatarFile(e.target.files[0]);
+            }
+          }
+        }}
+      />
+
+      <ImagePlus className="h-5 w-5" />
+      <span className="text-[10px]">
+        {i === 0 ? "Capa" : "Foto"}
+      </span>
+    </label>
+  ))}
+</div>
             <p className="mt-2 text-[11px] text-muted-foreground">
               Fotos sensíveis podem ir direto para o álbum privado, com blur automático.
             </p>
           </div>
-        </section>
+      
 
         <button
           onClick={() => void handleSubmit()}
@@ -298,9 +357,9 @@ const [isGeocoding, setIsGeocoding] = useState(false);
           Já tem conta?{" "}
           <Link to="/entrar" className="font-semibold text-primary-glow">
             Entrar
-          </Link>
+</Link>
         </p>
       </main>
     </div>
-  );
+  ); 
 }

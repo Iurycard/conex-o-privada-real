@@ -269,30 +269,59 @@ function SettingsPage() {
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
 
+  //Trava de segurança
+  if (!current) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        </div>
+    )
+  }
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     navigate({ to: "/", replace: true });
   };
-
-
+  
   const publicAlbum = current.publicAlbum ?? [];
   const privateAlbum = current.privateAlbum ?? [];
   const albumCount = publicAlbum.length + privateAlbum.length;
 
-  const addPhoto = (album: "public" | "private", event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") return;
-      const photos = album === "public" ? publicAlbum : privateAlbum;
-      updateCurrentAlbums(album, [...photos, reader.result]);
-      toast("Foto adicionada ao álbum");
-    };
-    reader.readAsDataURL(file);
-    event.target.value = "";
-  };
+ const addPhoto = async (album: "public" | "private", event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    toast.error("Usuário não autenticado");
+    return;
+  }
+
+  // Define o caminho da pasta de acordo com o tipo de álbum
+  const folder = album === "public" ? "public" : "private";
+  const filePath = `${folder}/${user.id}/${Date.now()}-${file.name}`;
+
+  // 1. Faz upload do arquivo para o bucket 'album'
+  const { error: uploadError } = await supabase.storage
+    .from("album")
+    .upload(filePath, file, { upsert: true });
+
+  if (uploadError) {
+    console.error("Erro no upload do álbum:", uploadError);
+    toast.error("Erro ao enviar a imagem");
+    return;
+  }
+
+  // 2. Obtém a URL pública do arquivo enviado
+  const { data } = supabase.storage.from("album").getPublicUrl(filePath);
+  const publicUrl = data.publicUrl;
+
+  // 3. Atualiza os estados locais do formulário com a nova URL
+  const photos = album === "public" ? publicAlbum : privateAlbum;
+  updateCurrentAlbums(album, [...photos, publicUrl]);
+  
+  toast("Foto adicionada ao álbum com sucesso!");
+  event.target.value = "";
+};
   const removePhoto = (album: "public" | "private", index: number) => {
     const photos = album === "public" ? publicAlbum : privateAlbum;
     updateCurrentAlbums(album, photos.filter((_, photoIndex) => photoIndex !== index));

@@ -1,8 +1,4 @@
 import {
-  randomAvatar,
-  randomCover,
-  randomPrivateAlbum,
-  randomPublicAlbum,
   type AccountType,
   type Profile,
 } from "@/lib/mock-data";
@@ -14,7 +10,7 @@ export type ProfileRow = {
   city: string;
   bio: string;
   gender: string | null;
-  orientation: string | null;
+  orientation?: string | null;
   birth_date: string | null;
   hue: number;
   avatar: string | null;
@@ -36,26 +32,27 @@ function ageFrom(birthDate: string | null): number {
 }
 
 export function rowToProfile(row: ProfileRow): Profile {
+
   return {
     id: row.id,
     nick: row.nick,
-    type: row.type as AccountType,
-    city: row.city || "Brasil",
+    type: (row.type as AccountType) || "personal",
     distance: "0 km",
     distanceKm: 0,
+    city: row.city || "",
     age: ageFrom(row.birth_date),
     vip: row.vip,
-    hue: row.hue,
+    hue: row.hue ?? 0,
     bio: row.bio || "Perfil recém-criado.",
     ...(row.gender ? { gender: row.gender } : {}),
     ...(row.orientation ? { orientation: row.orientation } : {}),
     ...(row.birth_date ? { birthDate: row.birth_date } : {}),
     ...(typeof row.latitude === "number" ? { latitude: row.latitude } : {}),
     ...(typeof row.longitude === "number" ? { longitude: row.longitude } : {}),
-    avatar: row.avatar ?? randomAvatar(),
-    cover: row.cover ?? randomCover(),
+    avatar: row.avatar ?? "",
+    cover: row.cover ?? "",
     lookingFor: (row.looking_for ?? []) as AccountType[],
-    publicAlbum: row.public_album?.length ? row.public_album : randomPublicAlbum(),
-    privateAlbum: row.private_album?.length ? row.private_album : randomPrivateAlbum(),
+    publicAlbum: row.public_album ?? [],
+    privateAlbum: row.private_album ?? [],
   };
 }
