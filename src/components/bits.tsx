@@ -1,12 +1,12 @@
 import { Crown } from "lucide-react";
-import type { Profile } from "@/lib/mock-data";
+import type { Profile } from "@/context/profiles-context";
 
 export function AvatarOrb({
   profile,
   size = 44,
   ring = true,
 }: {
-  profile: Pick<Profile, "nick" | "hue" | "vip"> & { avatar?: string | undefined };
+  profile: Pick<Profile, "nick" | "hue" | "vip"> & { avatar?: string | null };
   size?: number;
   ring?: boolean;
 }) {
@@ -76,8 +76,8 @@ export function MediaBlock({
 }: {
   hue: number;
   label?: string;
-  src?: string | undefined;
-  alt?: string | undefined;
+  src?: string | null;
+  alt?: string | null;
   className?: string;
 }) {
   return (

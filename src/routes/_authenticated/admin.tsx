@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import { supabase } from '@/integrations/supabase/client'
 import { createFileRoute } from '@tanstack/react-router'
 import { 
   Users,
@@ -86,69 +88,43 @@ export interface ReportItem {
 }
  
 
-// Dados simulados baseados no mock-data
-const INITIAL_USERS: AdminUser[] = [
-  {
-    id: 'usr_1',
-    name: 'Ana Silva',
-    email: 'ana.silva@email.com',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    status: 'active',
-    isVerified: true,
-    createdAt: '2025-01-15',
-    reportsCount: 0
-  },
-  {
-    id: 'usr_2',
-    name: 'Carlos Eduardo',
-    email: 'carlos.dudu@email.com',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-    status: 'suspended',
-    isVerified: false,
-    createdAt: '2025-02-01',
-    reportsCount: 3
-  },
-  {
-    id: 'usr_3',
-    name: 'Mariana Lima',
-    email: 'mari.lima@email.com',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-    status: 'banned',
-    isVerified: false,
-    createdAt: '2024-11-20',
-    reportsCount: 8
-  }
-]
+export default function AdminUsersManagement() {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
 
-const INITIAL_REPORTS: ReportItem[] = [
-  {
-    id: 'rpt_1',
-    reporterName: 'João Pedro',
-    targetType: 'user',
-    targetId: 'usr_2',
-    targetName: 'Carlos Eduardo',
-    reason: 'Conteúdo ofensivo em comentários',
-    createdAt: '2025-02-10',
-    contentPreview: 'Comentário: "Isso é inaceitável!"'
-  },
-  {
-    id: 'rpt_2',
-    reporterName: 'Fernanda Costa',
-    targetType: 'post',
-    targetId: 'post_5',
-    targetName: 'Victor',
-    reason: 'Discurso de ódio',
-    createdAt: '2025-02-12',
-    contentPreview: 'gente esquisita'
-  }
-]
+  useEffect(() => {
+    async function checkAdmin() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate({ to: "/entrar" });
+        return;
+      }
+      const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", user.id).single();
+      if (!profile?.is_admin) {
+        navigate({ to: "/feed" });
+        return;
+      }
+      setLoading(false);
+      // Carrega dados
+      supabase.from('profiles').select('*').then(({ data }) => {
+        if (data) setUsers(data.map((p: any) => ({
+          id: p.id,
+          name: p.nick || p.id,
+          email: p.id,
+          avatar: p.avatar || '',
+          status: p.status || 'active',
+          isVerified: p.is_verified || false,
+          createdAt: p.created_at,
+          reportsCount: 0
+        })));
+      });
+    }
+    checkAdmin();
+  }, [navigate]);
 
-export default function AdminUsersManagement() 
-
-{
   const [activeTab, setActiveTab] = useState<'users' | 'reports' | 'media' | 'verification' | 'system'>('reports')
-  const [users, setUsers] = useState<AdminUser[]>(INITIAL_USERS)
-  const [reports, setReports] = useState<ReportItem[]>(INITIAL_REPORTS)
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [reports, setReports] = useState<ReportItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [mediaItems, setMediaItems] = useState<MediaAuditItem[]>(INITIAL_MEDIA_ITEMS)
@@ -381,3 +357,7 @@ export default function AdminUsersManagement()
     </div>
   )
 }
+function setUsers(arg0: { id: any; name: any; email: any; avatar: any; status: any; isVerified: any; createdAt: any; reportsCount: number }[]) {
+  throw new Error('Function not implemented.')
+}
+

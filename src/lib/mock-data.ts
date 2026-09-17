@@ -67,7 +67,7 @@ export type Profile = {
   bio: string;
   gender?: string | undefined;
   orientation?: string | undefined;
-  birthDate?: string | undefined;
+  birth_date?: string | undefined;
   latitude?: number | undefined;
   longitude?: number | undefined;
   avatar?: string | undefined;

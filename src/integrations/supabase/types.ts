@@ -348,6 +348,47 @@ export type Database = {
         }
         Relationships: []
       }
+      posts: {
+        Row: {
+          id: string
+          author_id: string
+          text: string
+          media: string | null
+          image: string | null
+          likes: number
+          comments: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          author_id: string
+          text?: string
+          media?: string | null
+          image?: string | null
+          likes?: number
+          comments?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          author_id?: string
+          text?: string
+          media?: string | null
+          image?: string | null
+          likes?: number
+          comments?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never

@@ -1,21 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  posts as seedPosts,
-  profiles as seedProfiles,
-  randomAvatar,
-  randomCover,
-  randomPostImage,
-  randomPrivateAlbum,
-  randomPublicAlbum,
-  type AccountType,
-  type Post,
-  type Profile,
-} from "@/lib/mock-data";
+import { Tables } from "@/integrations/supabase/types";
 import { rowToProfile, type ProfileRow } from "@/lib/profile-mapping";
 import { clearPendingProfile, readPendingProfile } from "@/lib/pending-profile";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
+export type Profile = Tables<"profiles">;
+export type Post = Tables<"posts"> & { profiles?: Profile };
+export type AccountType = Profile["type"];
 export type NewProfileInput = {
   nick: string;
   type: AccountType;
@@ -29,7 +21,6 @@ export type NewProfileInput = {
 };
 
 const BLOCKED_STORAGE_KEY = "conexao-privada.blockedIds";
-const POSTS_STORAGE_KEY = "conexao-privada.posts";
 
 type ProfilesContextValue = {
   profiles: Profile[];
@@ -42,7 +33,7 @@ type ProfilesContextValue = {
   createPost: (input: { text: string; mediaType?: "image" | "video"; mediaUrl?: string; authorId?: string }) => void;
   updateCurrentAlbums: (album: "public" | "private", photos: string[]) => void;
   updateCurrentProfile: (
-    changes: Partial<Pick<Profile, "nick" | "type" | "gender" | "orientation" | "birthDate" | "city" | "bio" | "lookingFor" | "avatar" | "latitude" | "longitude">>,
+    changes: Partial<Pick<Profile, "nick" | "type" | "gender" | "orientation" | "birth_date" | "city" | "bio" | "looking_for" | "avatar">>,
   ) => void;
   blockedIds: string[];
   blockProfile: (id: string) => void;
@@ -58,27 +49,14 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [dbProfiles, setDbProfiles] = useState<Profile[]>([]);
   const [localProfiles, setLocalProfiles] = useState<Profile[]>([]);
-  const [posts, setPosts] = useState<Post[]>(() => {
-    if (typeof window === "undefined") return seedPosts;
-
-    try {
-      const raw = window.localStorage.getItem(POSTS_STORAGE_KEY);
-      if (!raw) return seedPosts;
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : seedPosts;
-    } catch {
-      return seedPosts;
-    }
-  });
+  const [posts, setPosts] = useState<Post[]>([]);
   const [fallbackId, setFallbackId] = useState<string | null>(null);
   const [following, setFollowing] = useState<Record<string, boolean>>({});
   const [blockedIds, setBlockedIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
-
     try {
       const raw = window.localStorage.getItem(BLOCKED_STORAGE_KEY);
       if (!raw) return [];
-
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed)
         ? parsed.filter((id): id is string => typeof id === "string")
@@ -94,15 +72,10 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
     }
   }, [blockedIds]);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
-    }
-  }, [posts]);
-
-  const loadProfiles = useCallback(async () => {
+  const loadData = useCallback(async () => {
     if (!user) {
       setDbProfiles([]);
+      setPosts([]);
       return;
     }
 
@@ -118,28 +91,35 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           bio: pending.bio,
           hue: pending.hue,
           orientation: pending.orientation ?? null,
-          avatar: randomAvatar(),
-          cover: randomCover(),
           latitude: pending.latitude ?? null,
           longitude: pending.longitude ?? null,
           looking_for: pending.lookingFor,
-          public_album: randomPublicAlbum(),
-          private_album: randomPrivateAlbum(),
         });
       }
       clearPendingProfile();
     }
 
-    const { data } = await supabase
+    // Busca perfis reais
+    const { data: profilesData } = await supabase
       .from("profiles")
       .select("*")
       .order("created_at", { ascending: false });
-    if (data) setDbProfiles((data as ProfileRow[]).map(rowToProfile));
+    if (profilesData) setDbProfiles((profilesData as ProfileRow[]).map(rowToProfile));
+
+    // Busca posts reais relacionando os perfis
+    const { data: postsData } = await supabase
+      .from("posts")
+      .select("*, profiles(*)")
+      .order("created_at", { ascending: false });
+
+    if (postsData) {
+      setPosts(postsData as unknown as Post[]);
+    }
   }, [user]);
 
   useEffect(() => {
-    void loadProfiles();
-  }, [loadProfiles]);
+    void loadData();
+  }, [loadData]);
 
   const profiles = useMemo(() => {
     const dbIds = new Set(dbProfiles.map((p) => p.id));
@@ -147,7 +127,6 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   }, [dbProfiles, localProfiles]);
 
   const currentId = user?.id || fallbackId;
-  const current = profiles.find((p) => p.id === currentId) || null;
 
   const value = useMemo<ProfilesContextValue>(() => {
     const getProfile = (id: string) => profiles.find((p) => p.id === id);
@@ -169,20 +148,18 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
             id,
             nick: input.nick.trim(),
             type: input.type,
-            city: input.city.trim() || "São Paulo, SP",
-            distance: "0 km",
-            distanceKm: 0,
-            age: 30,
-            vip: false,
-            avatar: randomAvatar(),
-            cover: randomCover(),
+            city: input.city.trim() || "",
+            bio: input.bio.trim() || "",
             hue: input.hue,
-            bio: input.bio.trim() || "Perfil recém-criado.",
-            orientation: input.orientation,
-            lookingFor: input.lookingFor ?? [],
-            publicAlbum: randomPublicAlbum(),
-            privateAlbum: randomPrivateAlbum(),
-          };
+            orientation: input.orientation ?? null,
+            looking_for: input.lookingFor ?? [],
+            vip: false,
+            avatar: null,
+            cover: null,
+            birth_date: null,
+            gender: null,
+            created_at: new Date().toISOString(),
+           } as Profile;
           setLocalProfiles((list) => [profile, ...list]);
           setFallbackId(id);
           return id;
@@ -195,14 +172,10 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           city: input.city.trim(),
           bio: input.bio.trim(),
           hue: input.hue,
-          avatar: randomAvatar(),
-          cover: randomCover(),
           orientation: input.orientation ?? null,
           latitude: input.latitude ?? null,
           longitude: input.longitude ?? null,
           looking_for: input.lookingFor ?? [],
-          public_album: randomPublicAlbum(),
-          private_album: randomPrivateAlbum(),
         };
         const { data, error } = await supabase
           .from("profiles")
@@ -212,18 +185,6 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         if (error) throw error;
         const profile = rowToProfile(data as ProfileRow);
         setDbProfiles((list) => [profile, ...list.filter((p) => p.id !== profile.id)]);
-        setPosts((list) => [
-          {
-            id: `post-${profile.id}`,
-            authorId: profile.id,
-            time: "agora",
-            text: `${profile.nick} acabou de entrar na comunidade. Diga oi!`,
-            likes: 0,
-            comments: 0,
-            media: "foto",
-          },
-          ...list,
-        ]);
         return profile.id;
       },
       createPost: ({ text, mediaType = "image", mediaUrl, authorId }) => {
@@ -232,13 +193,13 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
 
         const createdPost: Post = {
           id: `post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          authorId: authorId ?? currentId ?? "",
-          time: "agora",
-          text: message || "Nova publicação",
+          author_id: authorId ?? currentId ?? "",
+          created_at: new Date().toISOString(),
+          text: message,
+          media: mediaType === "video" ? "video" : "foto",
+          image: mediaUrl ?? null,
           likes: 0,
           comments: 0,
-          media: mediaType === "video" ? "video" : "foto",
-          image: mediaUrl ?? randomPostImage(),
         };
 
         setPosts((list) => [createdPost, ...list]);
@@ -267,13 +228,12 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
               ...(changes.type !== undefined ? { type: changes.type } : {}),
               ...(changes.gender !== undefined ? { gender: changes.gender } : {}),
               ...(changes.orientation !== undefined ? { orientation: changes.orientation ?? null } : {}),
-              ...(changes.birthDate !== undefined ? { birth_date: changes.birthDate || null } : {}),
+              ...(changes.birth_date !== undefined ? { birth_date: changes.birth_date || null } : {}),
               ...(changes.city !== undefined ? { city: changes.city } : {}),
               ...(changes.bio !== undefined ? { bio: changes.bio } : {}),
-              ...(changes.lookingFor !== undefined ? { looking_for: changes.lookingFor } : {}),
+              ...(changes.looking_for !== undefined ? { looking_for: changes.looking_for } : {}),
               ...(changes.avatar !== undefined ? { avatar: changes.avatar } : {}),
-              ...(changes.latitude !== undefined ? { latitude: changes.latitude ?? null } : {}),
-              ...(changes.longitude !== undefined ? { longitude: changes.longitude ?? null } : {}),
+
             })
             .eq("id", user.id);
           return;

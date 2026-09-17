@@ -56,20 +56,16 @@ function ExplorePage() {
         !isBlocked(p.id) &&
         (filter.length === 0 || filter.includes(p.type)) &&
         (city === "Todas" || p.city === city) &&
-        (lookingFor === "Todos" || (p.lookingFor ?? []).includes(lookingFor as AccountType)) &&
-        p.nick.toLowerCase().includes(q.toLowerCase()) &&
-        p.distanceKm <= distance[0]! &&
-        p.age >= ageRange[0]! &&
-        p.age <= ageRange[1]!,
+        (lookingFor === "Todos" || (p.looking_for ?? []).includes(lookingFor as AccountType)) &&
+        p.nick.toLowerCase().includes(q.toLowerCase())
     )
     .sort((a, b) => Number(b.vip) - Number(a.vip));
 
   const activeFilters =
     (filter.length > 0 ? 1 : 0) +
     (city !== "Todas" ? 1 : 0) +
-    (lookingFor !== "Todos" ? 1 : 0) +
-    (distance[0]! < MAX_DISTANCE ? 1 : 0) +
-    (ageRange[0]! > 18 || ageRange[1]! < 65 ? 1 : 0);
+    (lookingFor !== "Todos" ? 1 : 0); 
+    
 
   return (
     <AppShell>
@@ -264,12 +260,12 @@ function ExplorePage() {
                   {p.vip && <VipBadge className="absolute right-2 top-2" />}
                 </div>
                 <p className="mt-3 truncate text-sm font-semibold">
-                  {p.nick} <span className="text-muted-foreground">· {p.age}</span>
+                  {p.nick} <span className="text-muted-foreground">· {p.birth_date}</span>
                 </p>
                 <TypeBadge type={p.type} className="mt-1.5" />
                 <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{p.bio}</p>
                 <p className="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <MapPin className="h-3 w-3" /> {p.city} · {p.distance}
+                  <MapPin className="h-3 w-3" /> {p.city}
                 </p>
               </Link>
             ))}
