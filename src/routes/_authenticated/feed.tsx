@@ -29,7 +29,7 @@ export const Route = createFileRoute("/_authenticated/feed")({
 function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][number] }) {
   const author = post.profiles;
   const { isVip, openVipModal } = useVip();
-  const [liked, setLiked] = useState(false);
+  const { likePost } = useProfiles();
   const navigate = useNavigate();
 
   if (!author) return null;
@@ -121,11 +121,11 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
       <div className="flex items-center gap-5 px-4 py-3">
         <button
           type="button"
-          onClick={() => setLiked(!liked)}
-          className={`flex items-center gap-1.5 text-sm ${liked ? "text-primary-glow" : "text-muted-foreground"}`}
+          onClick={() => likePost(post.id)}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary-glow"
         >
-          <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />
-          {liked ? 1 : 0}
+          <Heart className="h-4 w-4" />
+          {post.likes}
         </button>
 
         <span className="flex items-center gap-1.5 text-sm text-muted-foreground">

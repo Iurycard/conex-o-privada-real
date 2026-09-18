@@ -41,6 +41,8 @@ type ProfilesContextValue = {
   isBlocked: (id: string) => boolean;
   isFollowing: (id: string) => boolean;
   toggleFollow: (id: string) => void;
+  likePost: (postId: string) => Promise<void>;
+  addComment: (postId: string, text: string) => Promise<void>;
 };
 
 const ProfilesContext = createContext<ProfilesContextValue | null>(null);
@@ -71,6 +73,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       window.localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(blockedIds));
     }
   }, [blockedIds]);
+  
 
   const loadData = useCallback(async () => {
     if (!user) {
@@ -99,14 +102,14 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       clearPendingProfile();
     }
 
-    // Busca perfis reais
     const { data: profilesData } = await supabase
       .from("profiles")
       .select("*")
       .order("created_at", { ascending: false });
-    if (profilesData) setDbProfiles((profilesData as ProfileRow[]).map(rowToProfile));
+    if (profilesData) {
+      setDbProfiles((profilesData as ProfileRow[]).map(rowToProfile) as unknown as Profile[]);
+    }
 
-    // Busca posts reais relacionando os perfis
     const { data: postsData } = await supabase
       .from("posts")
       .select("*, profiles(*)")
@@ -114,6 +117,20 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
 
     if (postsData) {
       setPosts(postsData as unknown as Post[]);
+    }
+
+    if (user) {
+      const { data: followsData } = await supabase
+        .from("follows")
+        .select("following_id")
+        .eq("follower_id", user.id);
+      if (followsData) {
+        const followsRecord: Record<string, boolean> = {};
+        followsData.forEach((row: { following_id: string }) => {
+          followsRecord[row.following_id] = true;
+        });
+        setFollowing(followsRecord);
+      }
     }
   }, [user]);
 
@@ -159,7 +176,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
             birth_date: null,
             gender: null,
             created_at: new Date().toISOString(),
-           } as Profile;
+          } as Profile;
           setLocalProfiles((list) => [profile, ...list]);
           setFallbackId(id);
           return id;
@@ -183,7 +200,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           .select("*")
           .single();
         if (error) throw error;
-        const profile = rowToProfile(data as ProfileRow);
+        const profile = rowToProfile(data as ProfileRow) as unknown as Profile;
         setDbProfiles((list) => [profile, ...list.filter((p) => p.id !== profile.id)]);
         return profile.id;
       },
@@ -233,7 +250,6 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
               ...(changes.bio !== undefined ? { bio: changes.bio } : {}),
               ...(changes.looking_for !== undefined ? { looking_for: changes.looking_for } : {}),
               ...(changes.avatar !== undefined ? { avatar: changes.avatar } : {}),
-
             })
             .eq("id", user.id);
           return;
@@ -247,14 +263,37 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       unblockProfile: (id) => setBlockedIds((ids) => ids.filter((blockedId) => blockedId !== id)),
       isBlocked: (id: string) => blockedIds.includes(id),
       isFollowing: (id: string) => !!following[id],
-      toggleFollow: (id: string) => setFollowing((f) => ({ ...f, [id]: !f[id] })),
+      toggleFollow: async (id: string) => {
+        const currentlyFollowing = !!following[id];
+        setFollowing((f) => ({ ...f, [id]: !f[id] }));
+        if (!user) return;
+        if (currentlyFollowing) {
+          await supabase.from("follows").delete().eq("follower_id", user.id).eq("following_id", id);
+        } else {
+          await supabase.from("follows").insert({ follower_id: user.id, following_id: id });
+        }
+      },
+      likePost: async (postId: string) => {
+        const post = posts.find((p) => p.id === postId);
+        if (!post) return;
+        const newLikes = post.likes + 1;
+        setPosts((list) => list.map((p) => (p.id === postId ? { ...p, likes: newLikes } : p)));
+        await supabase.from("posts").update({ likes: newLikes }).eq("id", postId);
+      },
+      addComment: async (postId: string, text: string) => {
+        const post = posts.find((p) => p.id === postId);
+        if (!post) return;
+        const newComments = post.comments + 1;
+        setPosts((list) => list.map((p) => (p.id === postId ? { ...p, comments: newComments } : p)));
+        await supabase.from("posts").update({ comments: newComments }).eq("id", postId);
+      },
     };
   }, [profiles, posts, currentId, following, blockedIds, user]);
 
   return <ProfilesContext.Provider value={value}>{children}</ProfilesContext.Provider>;
 }
 
-export function useProfiles() {
+ export function useProfiles() {
   const ctx = useContext(ProfilesContext);
   if (!ctx) throw new Error("useProfiles precisa estar dentro de ProfilesProvider");
   return ctx;
