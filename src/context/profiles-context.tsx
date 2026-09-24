@@ -2,14 +2,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { Tables } from "@/integrations/supabase/types";
 import { rowToProfile, type ProfileRow } from "@/lib/profile-mapping";
 import { clearPendingProfile, readPendingProfile } from "@/lib/pending-profile";
+import { uploadAlbumPhotos } from "@/lib/album-storage";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
 export type Profile = Tables<"profiles">;
 export type Post = Tables<"posts"> & { profiles?: Profile };
+export type PostComment = Tables<"post_comments"> & { profile: Profile | undefined };
 export type AccountType = Profile["type"];
 export type NewProfileInput = {
   nick: string;
+  username: string;
   type: AccountType;
   city: string;
   bio: string;
@@ -30,8 +33,17 @@ type ProfilesContextValue = {
   setCurrentId: (id: string) => void;
   getProfile: (id: string) => Profile | undefined;
   addProfile: (input: NewProfileInput) => Promise<string>;
-  createPost: (input: { text: string; mediaType?: "image" | "video"; mediaUrl?: string; authorId?: string }) => void;
-  updateCurrentAlbums: (album: "public" | "private", photos: string[]) => void;
+  createPost: (input: {
+    text: string;
+    mediaType?: "image" | "video" | undefined;
+    mediaUrl?: string | undefined;
+    wallProfileId?: string | undefined;
+    album?: "public" | "private";
+    mediaFile?: File | undefined;
+  }) => Promise<boolean>;
+  updatePost: (postId: string, text: string) => Promise<boolean>;
+  deletePost: (postId: string) => Promise<boolean>;
+  updatePrivateAlbum: (photos: string[]) => void;
   updateCurrentProfile: (
     changes: Partial<Pick<Profile, "nick" | "type" | "gender" | "orientation" | "birth_date" | "city" | "bio" | "looking_for" | "avatar">>,
   ) => void;
@@ -42,7 +54,10 @@ type ProfilesContextValue = {
   isFollowing: (id: string) => boolean;
   toggleFollow: (id: string) => void;
   likePost: (postId: string) => Promise<void>;
+  isPostLiked: (postId: string) => boolean;
   addComment: (postId: string, text: string) => Promise<void>;
+  getPostLikes: (postId: string) => Promise<Profile[]>;
+  getPostComments: (postId: string) => Promise<PostComment[]>;
 };
 
 const ProfilesContext = createContext<ProfilesContextValue | null>(null);
@@ -52,6 +67,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   const [dbProfiles, setDbProfiles] = useState<Profile[]>([]);
   const [localProfiles, setLocalProfiles] = useState<Profile[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
   const [fallbackId, setFallbackId] = useState<string | null>(null);
   const [following, setFollowing] = useState<Record<string, boolean>>({});
   const [blockedIds, setBlockedIds] = useState<string[]>(() => {
@@ -61,7 +77,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed)
-        ? parsed.filter((id): id is string => typeof id === "string")
+        ? parsed.filter((id: unknown): id is string => typeof id === "string")
         : [];
     } catch {
       return [];
@@ -79,6 +95,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
     if (!user) {
       setDbProfiles([]);
       setPosts([]);
+      setLikedPostIds(new Set());
       return;
     }
 
@@ -89,6 +106,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         await supabase.from("profiles").insert({
           id: user.id,
           nick: pending.nick,
+          username: (pending.username || pending.nick).trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
           type: pending.type,
           city: pending.city,
           bio: pending.bio,
@@ -112,12 +130,18 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
 
     const { data: postsData } = await supabase
       .from("posts")
-      .select("*, profiles(*)")
+      .select("*, profiles!posts_author_id_fkey(*)")
       .order("created_at", { ascending: false });
 
     if (postsData) {
-      setPosts(postsData as unknown as Post[]);
+      const normalizedPosts = postsData as unknown as Post[];
+      setPosts(normalizedPosts);
     }
+
+    const { data: likesData } = await supabase
+      .from("post_likes")
+      .select("post_id")
+      .eq("user_id", user.id);
 
     if (user) {
       const { data: followsData } = await supabase
@@ -145,6 +169,19 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
 
   const currentId = user?.id || fallbackId;
 
+  const notify = useCallback(
+    async (targetId: string, type: string, body: string) => {
+      if (!user || !targetId || targetId === user.id) return;
+      await supabase.from("notifications").insert({
+        user_id: targetId,
+        actor_id: user.id,
+        type,
+        body,
+      });
+    },
+    [user],
+  );
+
   const value = useMemo<ProfilesContextValue>(() => {
     const getProfile = (id: string) => profiles.find((p) => p.id === id);
 
@@ -164,6 +201,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           const profile: Profile = {
             id,
             nick: input.nick.trim(),
+            username: input.username.trim().toLowerCase(),
             type: input.type,
             city: input.city.trim() || "",
             bio: input.bio.trim() || "",
@@ -185,6 +223,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         const payload = {
           id: user.id,
           nick: input.nick.trim(),
+          username: input.username.trim().toLowerCase(),
           type: input.type,
           city: input.city.trim(),
           bio: input.bio.trim(),
@@ -204,35 +243,117 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         setDbProfiles((list) => [profile, ...list.filter((p) => p.id !== profile.id)]);
         return profile.id;
       },
-      createPost: ({ text, mediaType = "image", mediaUrl, authorId }) => {
+      createPost: async ({ text, mediaType = "image", mediaUrl, wallProfileId, album = "public", mediaFile }) => {
         const message = text.trim();
-        if (!message && !mediaUrl) return;
+        if (!message && !mediaUrl && !mediaFile) return false;
 
-        const createdPost: Post = {
-          id: `post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          author_id: authorId ?? currentId ?? "",
-          created_at: new Date().toISOString(),
-          text: message,
-          media: mediaType === "video" ? "video" : "foto",
-          image: mediaUrl ?? null,
-          likes: 0,
-          comments: 0,
-        };
+        const targetAuthorId = currentId;
+        if (!targetAuthorId) return false;
 
-        setPosts((list) => [createdPost, ...list]);
+        let finalImage = mediaUrl ?? null;
+
+        if (mediaFile) {
+          const [path] = await uploadAlbumPhotos(targetAuthorId, album, [mediaFile]);
+          if (!path) return false;
+
+          if (album === "private") {
+            const currentProfile = profiles.find((profile) => profile.id === targetAuthorId);
+            const currentAlbum = currentProfile?.private_album ?? [];
+            const nextAlbum = [...new Set([path, ...currentAlbum])];
+            patchDbProfile(targetAuthorId, { private_album: nextAlbum });
+            void supabase.from("profiles").update({ private_album: nextAlbum }).eq("id", targetAuthorId);
+            return true;
+          }
+
+          finalImage = path;
+        }
+
+        if (!currentId) return false;
+
+        const { data, error } = await supabase
+          .from("posts")
+          .insert({
+            author_id: targetAuthorId,
+            wall_profile_id: wallProfileId ?? null,
+            text: message,
+            media: mediaType === "video" ? "video" : "foto",
+            image: finalImage ?? null,
+          })
+          .select("*, profiles!posts_author_id_fkey(*)")
+          .single();
+
+        if (error) {
+          console.error("Erro ao salvar post:", error);
+          return false;
+        }
+
+        if (data) {
+          const nextPosts = [data as unknown as Post, ...posts];
+          setPosts(nextPosts);
+        }
+
+        return true;
       },
-      updateCurrentAlbums: (album, photos) => {
-        const key = album === "public" ? "publicAlbum" : "privateAlbum";
+      updatePost: async (postId, text) => {
+        const message = text.trim();
+        if (!message) return false;
+        const authorId = currentId;
+        if (!authorId) return false;
+
+        const { data, error } = await supabase
+          .from("posts")
+          .update({ text: message })
+          .eq("id", postId)
+          .eq("author_id", authorId)
+          .select("*, profiles!posts_author_id_fkey(*)")
+          .single();
+
+        if (error || !data) {
+          console.error("Erro ao editar post:", error);
+          return false;
+        }
+
+        setPosts((list) => list.map((post) => (post.id === postId ? (data as unknown as Post) : post)));
+        return true;
+      },
+      deletePost: async (postId) => {
+        const authorId = currentId;
+        const post = posts.find((item) => item.id === postId);
+        if (!authorId || !post || post.author_id !== authorId) return false;
+
+        const { error } = await supabase
+          .from("posts")
+          .delete()
+          .eq("id", postId)
+          .eq("author_id", authorId);
+
+        if (error) {
+          console.error("Erro ao remover post:", error);
+          return false;
+        }
+
+        const nextPosts = posts.filter((item) => item.id !== postId);
+        setPosts(nextPosts);
+        return true;
+      },
+      updatePrivateAlbum: (photos) => {
         if (user && currentId === user.id) {
-          patchDbProfile(currentId, { [key]: photos } as Partial<Profile>);
+          patchDbProfile(currentId, { private_album: photos });
           void supabase
             .from("profiles")
-            .update(album === "public" ? { public_album: photos } : { private_album: photos })
-            .eq("id", user.id);
+            .update({ private_album: photos })
+            .eq("id", user.id)
+            .then(({ error }) => {
+              if (error) console.error("Erro ao salvar álbum:", error);
+            });
           return;
         }
         setLocalProfiles((list) =>
-          list.map((profile) => (profile.id === currentId ? { ...profile, [key]: photos } : profile)),
+          list.map((profile) =>
+            profile.id === currentId
+              ? { ...profile, private_album: photos }
+              : profile,
+          ),
         );
       },
       updateCurrentProfile: (changes) => {
@@ -275,20 +396,66 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       },
       likePost: async (postId: string) => {
         const post = posts.find((p) => p.id === postId);
-        if (!post) return;
-        const newLikes = post.likes + 1;
+        if (!post || !user) return;
+        const alreadyLiked = likedPostIds.has(postId);
+        const interaction = alreadyLiked
+          ? await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", user.id)
+          : await supabase.from("post_likes").insert({ post_id: postId, user_id: user.id });
+        if (interaction.error) return;
+        const newLikes = Math.max(0, post.likes + (alreadyLiked ? -1 : 1));
+        setLikedPostIds((ids) => {
+          const next = new Set(ids);
+          if (alreadyLiked) next.delete(postId);
+          else next.add(postId);
+          return next;
+        });
         setPosts((list) => list.map((p) => (p.id === postId ? { ...p, likes: newLikes } : p)));
-        await supabase.from("posts").update({ likes: newLikes }).eq("id", postId);
+
+        if (!alreadyLiked && post.author_id !== user.id) {
+          await notify(post.author_id, "like", "curtiu sua publicação");
+        }
       },
+      isPostLiked: (postId: string) => likedPostIds.has(postId),
       addComment: async (postId: string, text: string) => {
         const post = posts.find((p) => p.id === postId);
-        if (!post) return;
+        const body = text.trim();
+        if (!post || !body || !user) return;
+        const { error: commentError } = await supabase
+          .from("post_comments")
+          .insert({ post_id: postId, user_id: user.id, body });
+        if (commentError) return;
         const newComments = post.comments + 1;
         setPosts((list) => list.map((p) => (p.id === postId ? { ...p, comments: newComments } : p)));
-        await supabase.from("posts").update({ comments: newComments }).eq("id", postId);
+
+        if (post.author_id !== user.id) {
+          await notify(post.author_id, "comment", "comentou na sua publicação");
+        }
+      },
+      getPostLikes: async (postId: string) => {
+        const { data, error } = await supabase
+          .from("post_likes")
+          .select("user_id")
+          .eq("post_id", postId);
+        if (error) return [];
+
+        const ids = new Set((data ?? []).map((like) => like.user_id));
+        return profiles.filter((profile) => ids.has(profile.id));
+      },
+      getPostComments: async (postId: string) => {
+        const { data, error } = await supabase
+          .from("post_comments")
+          .select("id, post_id, user_id, body, created_at")
+          .eq("post_id", postId)
+          .order("created_at", { ascending: true });
+        if (error) return [];
+
+        return (data ?? []).map((comment) => ({
+          ...comment,
+          profile: profiles.find((profile) => profile.id === comment.user_id),
+        }));
       },
     };
-  }, [profiles, posts, currentId, following, blockedIds, user]);
+  }, [profiles, posts, currentId, following, blockedIds, likedPostIds, user]);
 
   return <ProfilesContext.Provider value={value}>{children}</ProfilesContext.Provider>;
 }

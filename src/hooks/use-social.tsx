@@ -171,6 +171,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       registerVisit: async (id) => {
         if (!uid || id === uid) return;
         await supabase.from("profile_visits").insert({ visitor_id: uid, profile_id: id });
+        await notify(id, "visit", "visitou seu perfil");
         void refresh();
       },
       unreadCount: notifications.filter((n) => !n.read).length,

@@ -24,7 +24,7 @@ Protótipo visual navegável, apenas frontend, com dados fictícios em memória.
 
 ## Componentes de navegação
 
-- Cabeçalho fixo: logo discreto, sino de notificações com contador, botão de saída rápida (ícone de raio) que navega para uma página neutra
+- Cabeçalho fixo: logo discreto, Postar e configuraçoes.
 - Navegação fixa: barra inferior no mobile e lateral no desktop, com 5 itens (Feed, Explorar, Eventos, Chat, Perfil)
 
 ## Regras Free vs VIP (simuladas)
@@ -41,7 +41,5 @@ Modal elegante com borda dourada, lista de benefícios (vídeos, iniciar chats, 
 ## Detalhes técnicos
 
 - TanStack Start com rotas em `src/routes/`, layout compartilhado no `__root.tsx`
-- Estado mock em `src/lib/mock-data.ts` e contexto em `src/context/vip.tsx`
 - Componentes shadcn existentes (dialog, tabs, badge, avatar, card) estilizados pelos tokens
-- Imagens de capa/avatares geradas como assets locais, sem conteúdo sensível
-- `head()` próprio por rota com título e descrição específicos
+

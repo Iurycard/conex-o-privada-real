@@ -30,6 +30,7 @@ function EditProfilePage() {
   const [gender, setGender] = useState("");
   const [orientation, setOrientation] = useState("");
   const [nick, setNick] = useState("");
+  const [username, setUsername] = useState("");
   const [type, setType] = useState<AccountType | "">("");
   const [birthDate, setBirthDate] = useState("");
   const [city, setCity] = useState("");
@@ -74,6 +75,7 @@ useEffect(() => {
 
     if (data) {
       setNick(data.nick || "");
+      setUsername(data.username || "");
       setGender(data.gender || "");
       setOrientation(data.orientation || "");
       setType((data.type as AccountType) || "");
@@ -112,8 +114,8 @@ useEffect(() => {
 
 
 const saveProfile = async () => {
-  if (!nick.trim()) {
-    toast.error("Informe um nome para o perfil");
+  if (!nick.trim() || !username.trim()) {
+    toast.error("Informe o nome do perfil e o usuário");
     return;
   }
 
@@ -145,6 +147,7 @@ const saveProfile = async () => {
     .from("profiles")
     .update({
       nick: nick.trim(),
+      username: username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
       gender,
       orientation,
       type,
@@ -241,6 +244,17 @@ const saveProfile = async () => {
           <div>
             <Label htmlFor="profile-name" className="text-sm">Nome do perfil</Label>
             <Input id="profile-name" value={nick} onChange={(event) => setNick(event.target.value)} className="mt-2 border-border bg-surface" />
+          </div>
+
+          <div>
+            <Label htmlFor="profile-username" className="text-sm">Usuário (@)</Label>
+            <Input
+              id="profile-username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value.replace(/^@/, "").replace(/\s+/g, "_").toLowerCase())}
+              placeholder="Ex.: casal_lm"
+              className="mt-2 border-border bg-surface"
+            />
           </div>
 
           <div>

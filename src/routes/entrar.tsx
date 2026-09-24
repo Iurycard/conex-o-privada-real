@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Mail, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +31,37 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const pending = readPendingProfile();
+    if (!pending) return;
+    setBusy(true);
+    void addProfile(pending)
+      .then(() => {
+        clearPendingProfile();
+        navigate({ to: "/feed" });
+      })
+      .catch((error) => console.error("Erro ao criar perfil do Google:", error))
+      .finally(() => setBusy(false));
+  }, [addProfile, navigate, user]);
+
+  const sendPasswordReset = async () => {
+    if (!email.trim()) {
+      toast.error("Informe seu e-mail para recuperar a senha");
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/redefinir-senha`,
+    });
+    setBusy(false);
+    if (error) {
+      toast.error("Não foi possível enviar o e-mail de recuperação");
+      return;
+    }
+    toast.success("Enviamos um link para redefinir sua senha");
+  };
 
   const signIn = async () => {
     if (!email.trim() || !password) {
@@ -91,7 +122,7 @@ function LoginPage() {
 
       <main className="mx-auto w-full max-w-sm px-5 pb-16 pt-10">
         <h2 className="text-2xl font-semibold">
-          Bem-vindo de <span className="text-gradient-gold">volta</span>
+           <span className="text-gradient-gold">Bem-vindo de volta</span>
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Acesse sua conta para ver o feed, eventos e conversas.
@@ -142,6 +173,15 @@ function LoginPage() {
           className="mt-7 w-full rounded-full bg-gradient-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-neon disabled:opacity-60"
         >
           {busy ? "Entrando…" : "Entrar"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void sendPasswordReset()}
+          disabled={busy}
+          className="mt-3 w-full text-center text-xs font-medium text-primary-glow hover:underline disabled:opacity-60"
+        >
+          Esqueci minha senha
         </button>
 
         <div className="my-6 flex items-center gap-3 text-[11px] text-muted-foreground">

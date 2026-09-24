@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Heart, UserPlus, CalendarDays, MessageCircle, Lock, Bell } from "lucide-react";
+import { Heart, UserPlus, CalendarDays, MessageCircle, Lock, Bell, Eye } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AvatarOrb, PageHeader } from "@/components/bits";
 import { useProfiles } from "@/context/profiles-context";
@@ -23,6 +23,8 @@ export const Route = createFileRoute("/_authenticated/notificacoes")({
 
 const iconByType: Record<string, { icon: typeof Heart; tint: string }> = {
   like: { icon: Heart, tint: "text-primary-glow" },
+  comment: { icon: MessageCircle, tint: "text-primary-glow" },
+  visit: { icon: Eye, tint: "text-foreground" },
   follow: { icon: UserPlus, tint: "text-foreground" },
   event: { icon: CalendarDays, tint: "text-gold" },
   message: { icon: MessageCircle, tint: "text-primary-glow" },
@@ -43,7 +45,7 @@ function timeAgo(iso: string) {
 function NotificationsPage() {
   const { notifications, markNotificationsRead } = useSocial();
   const { profiles, currentId } = useProfiles();
-  const { isVip } = useVip();
+  const { isVip, openVipModal } = useVip();
 
   useEffect(() => {
     void markNotificationsRead();
@@ -59,21 +61,14 @@ function NotificationsPage() {
       <div className="space-y-4 px-4 pb-6 md:px-0">
         {/* Bloco de Visualização de Perfil (Quem olhou seu perfil) */}
         {!isVip ? (
-          <div className="rounded-xl border border-border bg-surface p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex -space-x-2">
-                {visitorItems.map((p) => (
-                  <span key={p.id} className="blur-[4px]">
-                    <AvatarOrb profile={p} size={32} />
-                  </span>
-                ))}
-              </div>
-              <div className="min-w-0 flex-1 text-sm">
-                <span className="font-medium text-foreground">Alguém</span>{" "}
-                <span className="text-muted-foreground">olhou seu perfil</span>
-              </div>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={openVipModal}
+            className="w-full rounded-xl border border-border bg-surface p-4 text-left transition-colors hover:border-primary/50"
+            aria-label="Abrir informações do VIP sobre visitantes do perfil"
+          >
+            <span className="text-sm text-muted-foreground">Alguém visitou seu perfil</span>
+          </button>
         ) : (
           <div className="grid gap-2">
             {visitorItems.map((p, i) => (
@@ -109,10 +104,27 @@ function NotificationsPage() {
               const actor = profiles.find((p) => p.id === n.actor_id);
               const kind = iconByType[n.type] ?? { icon: Bell, tint: "text-muted-foreground" };
               const Icon = kind.icon;
+
+              if (n.type === "visit" && !isVip) {
+                return (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={openVipModal}
+                    className={`flex w-full items-center gap-3 rounded-xl border bg-surface p-3 text-left transition-colors hover:border-primary/50 ${
+                      n.read ? "border-border" : "border-primary/30"
+                    }`}
+                    aria-label="Abrir informações do VIP sobre quem visitou seu perfil"
+                  >
+                    <span className="min-w-0 flex-1 text-sm text-muted-foreground">Alguém visitou seu perfil</span>
+                    <Icon className={`h-4 w-4 shrink-0 ${kind.tint}`} />
+                  </button>
+                );
+              }
               
               const body = (
                 <>
-                  <AvatarOrb profile={actor ?? { nick: "?", hue: 300, vip: false }} size={44} />
+                  <AvatarOrb profile={actor ?? { id: n.actor_id ?? `notification-${n.id}`, nick: "?", hue: 300, vip: false, avatar: null }} size={44} />
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="font-medium">{actor?.nick ?? "Alguém"}</span>{" "}
                     <span className="text-muted-foreground">{n.body}</span>

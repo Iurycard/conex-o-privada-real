@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { Crown } from "lucide-react";
 import type { Profile } from "@/context/profiles-context";
 
@@ -5,11 +6,16 @@ export function AvatarOrb({
   profile,
   size = 44,
   ring = true,
+  profileId,
+  clickable = false,
 }: {
-  profile: Pick<Profile, "nick" | "hue" | "vip"> & { avatar?: string | null };
+  profile: Pick<Profile, "id" | "nick" | "hue" | "vip"> & { avatar?: string | null };
   size?: number;
   ring?: boolean;
+  profileId?: string;
+  clickable?: boolean;
 }) {
+  const targetId = profileId ?? profile.id;
   const inner = (
     <span
       className="grid place-items-center overflow-hidden rounded-full font-display text-sm font-semibold text-foreground"
@@ -34,9 +40,7 @@ export function AvatarOrb({
     </span>
   );
 
-  if (!ring) return inner;
-
-  return (
+  const wrapped = ring ? (
     <span
       className={`inline-grid place-items-center rounded-full p-[2px] ${
         profile.vip ? "bg-gradient-gold" : "bg-surface-2"
@@ -44,6 +48,37 @@ export function AvatarOrb({
     >
       <span className="rounded-full bg-background p-[2px]">{inner}</span>
     </span>
+  ) : (
+    inner
+  );
+
+  if (!clickable || !targetId) return wrapped;
+
+  return (
+    <Link to="/perfil/$id" params={{ id: targetId }} className="inline-flex shrink-0" aria-label={`Ver perfil de ${profile.nick}`}>
+      {wrapped}
+    </Link>
+  );
+}
+
+export function ProfileNameLink({
+  profile,
+  className = "",
+  children,
+}: {
+  profile: Pick<Profile, "id" | "nick">;
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Link
+      to="/perfil/$id"
+      params={{ id: profile.id }}
+      className={className}
+      aria-label={`Ver perfil de ${profile.nick}`}
+    >
+      {children ?? profile.nick}
+    </Link>
   );
 }
 

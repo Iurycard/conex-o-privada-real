@@ -88,7 +88,7 @@ export interface ReportItem {
 }
  
 
-export default function AdminUsersManagement() {
+function AdminUsersManagement() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
@@ -97,11 +97,6 @@ export default function AdminUsersManagement() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         navigate({ to: "/entrar" });
-        return;
-      }
-      const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", user.id).single();
-      if (!profile?.is_admin) {
-        navigate({ to: "/feed" });
         return;
       }
       setLoading(false);

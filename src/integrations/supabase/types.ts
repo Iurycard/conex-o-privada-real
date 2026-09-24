@@ -298,6 +298,7 @@ export type Database = {
           longitude: number | null
           looking_for: string[]
           nick: string
+          username: string
           private_album: string[]
           public_album: string[]
           type: string
@@ -319,6 +320,7 @@ export type Database = {
           longitude?: number | null
           looking_for?: string[]
           nick: string
+          username: string
           private_album?: string[]
           public_album?: string[]
           type?: string
@@ -340,6 +342,7 @@ export type Database = {
           longitude?: number | null
           looking_for?: string[]
           nick?: string
+          username?: string
           private_album?: string[]
           public_album?: string[]
           type?: string
@@ -355,6 +358,7 @@ export type Database = {
           text: string
           media: string | null
           image: string | null
+          wall_profile_id: string | null
           likes: number
           comments: number
           created_at: string
@@ -365,6 +369,7 @@ export type Database = {
           text?: string
           media?: string | null
           image?: string | null
+          wall_profile_id?: string | null
           likes?: number
           comments?: number
           created_at?: string
@@ -375,6 +380,7 @@ export type Database = {
           text?: string
           media?: string | null
           image?: string | null
+          wall_profile_id?: string | null
           likes?: number
           comments?: number
           created_at?: string
@@ -388,6 +394,102 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ]
+      }
+      post_likes: {
+        Row: {
+          id: string
+          post_id: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          user_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      post_comments: {
+        Row: {
+          id: string
+          post_id: string
+          user_id: string
+          body: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          user_id: string
+          body: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          user_id?: string
+          body?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      album_photo_likes: {
+        Row: {
+          id: string
+          profile_id: string
+          photo_path: string
+          user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          profile_id: string
+          photo_path: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          profile_id?: string
+          photo_path?: string
+          user_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      album_photo_comments: {
+        Row: {
+          id: string
+          profile_id: string
+          photo_path: string
+          user_id: string
+          body: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          profile_id: string
+          photo_path: string
+          user_id: string
+          body: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          profile_id?: string
+          photo_path?: string
+          user_id?: string
+          body?: string
+          created_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {

@@ -31,12 +31,13 @@ export async function resolveAlbumUrls(paths: string[]): Promise<string[]> {
   const out: string[] = [];
   for (const path of paths) {
     if (!path) continue;
-    if (path.startsWith("http")) {
+    if (path.startsWith("http") || path.startsWith("data:")) {
       out.push(path);
       continue;
     }
-    const { data } = await supabase.storage.from(ALBUM_BUCKET).createSignedUrl(path, 60 * 60);
+    const { data, error } = await supabase.storage.from(ALBUM_BUCKET).createSignedUrl(path, 60 * 60);
     if (data?.signedUrl) out.push(data.signedUrl);
+    else if (error) console.error("Erro ao resolver foto do álbum:", path, error.message);
   }
   return out;
 }

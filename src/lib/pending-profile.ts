@@ -2,6 +2,7 @@ import type { AccountType } from "@/lib/mock-data";
 
 export type PendingProfile = {
   nick: string;
+  username: string;
   type: AccountType;
   city: string;
   bio: string;

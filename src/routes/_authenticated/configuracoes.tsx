@@ -19,7 +19,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useState, type ComponentType } from "react";
+import { useMemo, useState, type ComponentType } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import {
@@ -38,8 +38,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/context/profiles-context";
 import { useVip } from "@/context/vip";
+import { useSocial } from "@/hooks/use-social";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
+import type { Post } from "@/context/profiles-context";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -72,12 +75,6 @@ type SettingsRowProps = {
   onClick: () => void;
   destructive?: boolean;
 };
-
-const metrics = [
-  { icon: Image, label: "Meus álbuns", value: "0" },
-  { icon: Users, label: "Amigos e seguidores", value: "153" },
-  { icon: Eye, label: "Visitas recebidas", value: "4.998" },
-];
 
 const general = [
   { icon: Edit3, label: "Editar perfil", description: "Atualize suas informações públicas" },
@@ -263,18 +260,39 @@ function SettingsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { openVipModal } = useVip();
-  const { current, updateCurrentAlbums } = useProfiles();
+  const { current, posts, profiles, updatePrivateAlbum } = useProfiles();
+  const social = useSocial();
   const [darkMode, setDarkMode] = useState(true);
   const [albumsOpen, setAlbumsOpen] = useState(false);
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [selectedPublicPost, setSelectedPublicPost] = useState<Post | null>(null);
+
+  const privateAlbum = current?.private_album ?? [];
+  const privateAlbumUrls = useAlbumUrls(privateAlbum);
+  const publicPosts = useMemo(
+    () => posts.filter(
+      (post) => post.author_id === current?.id
+        && !post.wall_profile_id
+        && post.media === "foto"
+        && Boolean(post.image),
+    ),
+    [current?.id, posts],
+  );
+  const publicPostUrls = useAlbumUrls(
+    publicPosts.map((post) => post.image).filter((image): image is string => Boolean(image)),
+  );
+  const followerCount = current ? social.followersOf(current.id).length : 0;
+  const followingCount = current ? social.followingOf(current.id).length : 0;
+  const visitorProfiles = current
+    ? [...new Set(social.visits.filter((visit) => visit.profile_id === current.id).map((visit) => visit.visitor_id))]
+        .map((id) => profiles.find((profile) => profile.id === id))
+        .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile))
+    : [];
 
   //Trava de segurança
   if (!current) {
-    return (
-      <div className="p-8 text-center text-muted-foreground">
-        </div>
-    )
+    return <div className="p-8 text-center text-muted-foreground" />;
   }
 
   const handleSignOut = async () => {
@@ -282,11 +300,9 @@ function SettingsPage() {
     navigate({ to: "/", replace: true });
   };
   
-  const publicAlbum = current.publicAlbum ?? [];
-  const privateAlbum = current.privateAlbum ?? [];
-  const albumCount = publicAlbum.length + privateAlbum.length;
+  const albumCount = publicPosts.length + privateAlbum.length;
 
- const addPhoto = async (album: "public" | "private", event: React.ChangeEvent<HTMLInputElement>) => {
+ const addPhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
@@ -296,35 +312,18 @@ function SettingsPage() {
     return;
   }
 
-  // Define o caminho da pasta de acordo com o tipo de álbum
-  const folder = album === "public" ? "public" : "private";
-  const filePath = `${folder}/${user.id}/${Date.now()}-${file.name}`;
-
-  // 1. Faz upload do arquivo para o bucket 'album'
-  const { error: uploadError } = await supabase.storage
-    .from("album")
-    .upload(filePath, file, { upsert: true });
-
-  if (uploadError) {
-    console.error("Erro no upload do álbum:", uploadError);
-    toast.error("Erro ao enviar a imagem");
+  const [filePath] = await uploadAlbumPhotos(user.id, "private", [file]);
+  if (!filePath) {
+    toast.error("Não foi possível salvar a foto");
     return;
   }
-
-  // 2. Obtém a URL pública do arquivo enviado
-  const { data } = supabase.storage.from("album").getPublicUrl(filePath);
-  const publicUrl = data.publicUrl;
-
-  // 3. Atualiza os estados locais do formulário com a nova URL
-  const photos = album === "public" ? publicAlbum : privateAlbum;
-  updateCurrentAlbums(album, [...photos, publicUrl]);
+  updatePrivateAlbum([filePath, ...privateAlbum]);
   
   toast("Foto adicionada ao álbum com sucesso!");
   event.target.value = "";
 };
-  const removePhoto = (album: "public" | "private", index: number) => {
-    const photos = album === "public" ? publicAlbum : privateAlbum;
-    updateCurrentAlbums(album, photos.filter((_, photoIndex) => photoIndex !== index));
+  const removePhoto = (index: number) => {
+    updatePrivateAlbum(privateAlbum.filter((_, photoIndex) => photoIndex !== index));
     toast("Foto removida do álbum");
   };
 
@@ -348,59 +347,60 @@ function SettingsPage() {
 
         <div className="space-y-6">
           <SettingsSection title="Métricas da conta">
-            {metrics.map((item) => (
-              item.label === "Meus álbuns" ? (
-                <SettingsRow
-                  key={item.label}
-                  {...item}
-                  value={String(albumCount)}
-                  onClick={() => setAlbumsOpen(true)}
-                />
-              ) : item.label === "Amigos e seguidores" ? (
-                <SettingsRow
-                  key={item.label}
-                  {...item}
-                  onClick={() => navigate({ to: "/configuracoes/amigos" })}
-                />
-              ) : (
-                <SettingsRow key={item.label} {...item} onClick={() => setVisitsOpen(true)} />
-              )
-            ))}
+            <SettingsRow icon={Image} label="Meus álbuns" value={String(albumCount)} onClick={() => setAlbumsOpen(true)} />
+            <SettingsRow
+              icon={Users}
+              label="Amigos e seguidores"
+              value={String(followerCount + followingCount)}
+              onClick={() => navigate({ to: "/configuracoes/amigos" })}
+            />
+            <SettingsRow
+              icon={Eye}
+              label="Visitas recebidas"
+              value={String(visitorProfiles.length)}
+              onClick={() => setVisitsOpen(true)}
+            />
           </SettingsSection>
 
-          <SettingsSection title="Configurações gerais">
-            {general.map((item) => (
-              <SettingsRow
-                key={item.label}
-                icon={item.icon}
-                label={item.label}
-                onClick={() => {
-                  if (item.label === "Editar perfil") {
-                    navigate({ to: "/editar-perfil" });
-                    return;
-                  }
-                  if (item.label === "Permissões e privacidade") {
-                    setPrivacyOpen(true);
-                    return;
-                  }
-                  if (item.label === "Perfis bloqueados") {
-                    navigate({ to: "/configuracoes/bloqueados" });
-                    return;
-                  }
-                  if (item.vip) {
-                    openVipModal();
-                    return;
-                  }
-                  showPrototype(item.label);
-                }}
-              />
-            ))}
+          <SettingsSection title="Geral">
+            {general.map((item) => {
+              const { icon: Icon, ...rest } = item;
+
+              return (
+                <SettingsRow
+                  key={item.label}
+                  icon={Icon}
+                  {...rest}
+                  onClick={() => {
+                    if (item.label === "Editar perfil") {
+                      navigate({ to: "/editar-perfil" });
+                      return;
+                    }
+                    if (item.label === "Permissões e privacidade") {
+                      setPrivacyOpen(true);
+                      return;
+                    }
+                    if (item.label === "Perfis bloqueados") {
+                      navigate({ to: "/configuracoes/bloqueados" });
+                      return;
+                    }
+                    if (item.vip) {
+                      openVipModal();
+                      return;
+                    }
+                    showPrototype(item.label);
+                  }}
+                />
+              );
+            })}
           </SettingsSection>
 
           <SettingsSection title="Segurança e conta">
-            {security.map((item) => (
-              <SettingsRow key={item.label} {...item} onClick={() => showPrototype(item.label)} />
-            ))}
+            {security.map((item) => {
+              const { icon: Icon, ...rest } = item;
+
+              return <SettingsRow key={item.label} icon={Icon} {...rest} onClick={() => showPrototype(item.label)} />;
+            })}
           </SettingsSection>
 
           <SettingsSection title="Aparência">
@@ -424,9 +424,11 @@ function SettingsPage() {
           </SettingsSection>
 
           <SettingsSection title="Outros">
-            {others.map((item) => (
-              <SettingsRow key={item.label} {...item} onClick={() => showPrototype(item.label)} />
-            ))}
+            {others.map((item) => {
+              const { icon: Icon, ...rest } = item;
+
+              return <SettingsRow key={item.label} icon={Icon} {...rest} onClick={() => showPrototype(item.label)} />;
+            })}
           </SettingsSection>
 
           <section aria-label="Ações da conta" className="space-y-3">
@@ -480,28 +482,57 @@ function SettingsPage() {
         <DialogContent className="max-h-[88vh] overflow-y-auto rounded-xl border-border bg-surface sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Meus álbuns</DialogTitle>
-            <DialogDescription>Adicione ou remova fotos dos seus álbuns público e privado.</DialogDescription>
+            <DialogDescription>Veja as fotos públicas e gerencie o álbum privado.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6">
-            {([
-              ["public", "Álbum público", publicAlbum],
-              ["private", "Álbum privado", privateAlbum],
-            ] as const).map(([album, title, photos]) => (
+            <section aria-labelledby="public-album-title">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 id="public-album-title" className="text-sm font-semibold">Álbum público</h3>
+                <span className="text-xs text-muted-foreground">{publicPosts.length} foto(s)</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {publicPosts.map((post, index) => (
+                  <button
+                    key={post.id}
+                    type="button"
+                    onClick={() => setSelectedPublicPost(post)}
+                    className="aspect-square overflow-hidden rounded-lg bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    aria-label={`Abrir publicação de ${new Date(post.created_at).toLocaleDateString("pt-BR")}`}
+                  >
+                    <img
+                      src={publicPostUrls[index] ?? undefined}
+                      alt="Foto da publicação"
+                      className="h-full w-full object-cover transition-transform hover:scale-105"
+                    />
+                  </button>
+                ))}
+                {publicPosts.length === 0 && (
+                  <p className="col-span-3 py-6 text-center text-xs text-muted-foreground sm:col-span-4">
+                    Nenhuma publicação com foto.
+                  </p>
+                )}
+              </div>
+            </section>
+            {([["private", "Álbum privado", privateAlbum]] as const).map(([album, title, photos]) => (
               <section key={album} aria-labelledby={`${album}-album-title`}>
                 <div className="mb-2 flex items-center justify-between">
                   <h3 id={`${album}-album-title`} className="text-sm font-semibold">{title}</h3>
                   <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary-glow">
                     <Plus className="h-3.5 w-3.5" /> Adicionar foto
-                    <input type="file" accept="image/*" className="sr-only" onChange={(event) => addPhoto(album, event)} />
+                    <input type="file" accept="image/*" className="sr-only" onChange={addPhoto} />
                   </label>
                 </div>
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                   {photos.map((photo, index) => (
                     <div key={`${photo}-${index}`} className="group relative aspect-square overflow-hidden rounded-lg bg-surface-2">
-                      <img src={photo} alt={`${title}, foto ${index + 1}`} className="h-full w-full object-cover" />
+                      <img
+                        src={privateAlbumUrls[index] ?? undefined}
+                        alt={`${title}, foto ${index + 1}`}
+                        className="h-full w-full object-cover"
+                      />
                       <button
                         type="button"
-                        onClick={() => removePhoto(album, index)}
+                        onClick={() => removePhoto(index)}
                         aria-label={`Remover foto ${index + 1} de ${title}`}
                         className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                       >
@@ -513,6 +544,36 @@ function SettingsPage() {
               </section>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={selectedPublicPost !== null} onOpenChange={(open) => !open && setSelectedPublicPost(null)}>
+        <DialogContent className="rounded-xl border-border bg-surface sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Publicação com foto</DialogTitle>
+            <DialogDescription>
+              {selectedPublicPost && new Date(selectedPublicPost.created_at).toLocaleDateString("pt-BR")}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPublicPost && (
+            <div className="space-y-3">
+              <img
+                src={publicPostUrls[publicPosts.findIndex((post) => post.id === selectedPublicPost.id)] ?? undefined}
+                alt="Foto da publicação"
+                className="max-h-[55vh] w-full rounded-lg object-contain"
+              />
+              {selectedPublicPost.text && <p className="text-sm text-foreground/90">{selectedPublicPost.text}</p>}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPublicPost(null);
+                  navigate({ to: "/perfil/$id", params: { id: selectedPublicPost.author_id } });
+                }}
+                className="w-full rounded-lg bg-gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
+              >
+                Abrir publicação no perfil
+              </button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
       <Dialog open={visitsOpen} onOpenChange={setVisitsOpen}>

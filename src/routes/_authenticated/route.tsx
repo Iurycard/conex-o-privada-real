@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 
-const shouldBypassAuth = import.meta.env.DEV && import.meta.env.VITE_SKIP_AUTH === "true";
+const shouldBypassAuth = import.meta.env.DEV && import.meta.env["VITE_SKIP_AUTH"] === "true";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,

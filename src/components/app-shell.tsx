@@ -15,10 +15,11 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useVip } from "@/context/vip";
 import { useProfiles } from "@/context/profiles-context";
+import { useSocial } from "@/hooks/use-social";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+export function openPostComposer(album: "public" | "private" = "public") {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("conexao-privada:open-post-composer", { detail: { album } }));
+  }
+}
+
 function PostButton() {
   const { isVip, openVipModal } = useVip();
   const { createPost } = useProfiles();
@@ -39,11 +46,25 @@ function PostButton() {
   const [text, setText] = useState("");
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<"image" | "video" | null>(null);
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    const handleOpenComposer = (event: Event) => {
+      const album = (event as CustomEvent<{ album?: "public" | "private" }>).detail?.album;
+      if (album) setVisibility(album);
+      setOpen(true);
+    };
+    window.addEventListener("conexao-privada:open-post-composer", handleOpenComposer);
+    return () => window.removeEventListener("conexao-privada:open-post-composer", handleOpenComposer);
+  }, []);
 
   const resetDraft = () => {
     setText("");
     setMediaUrl(null);
     setMediaType(null);
+    setVisibility("public");
+    setSelectedFile(null);
   };
 
   const handleMediaChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -57,6 +78,8 @@ function PostButton() {
       return;
     }
 
+    setSelectedFile(file);
+
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
@@ -68,7 +91,7 @@ function PostButton() {
     event.target.value = "";
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     const hasContent = text.trim().length > 0 || !!mediaUrl;
     if (!hasContent) {
       toast.error("Adicione texto ou uma mídia antes de publicar");
@@ -80,11 +103,18 @@ function PostButton() {
       return;
     }
 
-    createPost({
+    const saved = await createPost({
       text,
       mediaType: mediaType ?? (mediaUrl ? "image" : undefined),
       mediaUrl: mediaUrl ?? undefined,
+      album: visibility,
+      mediaFile: selectedFile ?? undefined,
     });
+
+    if (!saved) {
+      toast.error("Não foi possível salvar a publicação");
+      return;
+    }
 
     resetDraft();
     setOpen(false);
@@ -94,21 +124,33 @@ function PostButton() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button className="inline-flex items-center gap-1.5 rounded-full bg-gradient-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-neon">
+        <button
+          type="button"
+          aria-label="Criar nova publicação"
+          title="Postar"
+          className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-gradient-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground shadow-neon sm:text-xs"
+        >
           <PenSquare className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Postar</span>
+          <span>Postar</span>
         </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto p-4 sm:max-h-[calc(100dvh-2rem)] sm:max-w-md sm:p-6">
         <DialogHeader>
           <DialogTitle>Nova publicação</DialogTitle>
           <DialogDescription>Compartilhe algo com a comunidade.</DialogDescription>
         </DialogHeader>
 
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-surface p-2">
+          <span className="text-sm font-medium text-foreground">Compartilhe seus desejos...</span>
+          <span className="flex items-center gap-2 rounded-full border border-border bg-surface-2 px-2 py-1 text-[10px] text-muted-foreground">
+            {visibility === "public" ? "Público" : "Privado"}
+          </span>
+        </div>
+
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="O que você quer contar?"
+          placeholder="Compartilhe seus desejos..."
           rows={4}
           aria-label="Texto da publicação"
         />
@@ -135,11 +177,11 @@ function PostButton() {
           </div>
 
           {mediaUrl && (
-            <div className="relative overflow-hidden rounded-xl border border-border bg-surface">
+            <div className="relative h-20 overflow-hidden rounded-xl border border-border bg-surface sm:h-28">
               {mediaType === "video" ? (
-                <video src={mediaUrl} controls className="max-h-60 w-full object-cover" />
+                <video src={mediaUrl} controls className="h-full w-full object-contain" />
               ) : (
-                <img src={mediaUrl} alt="Mídia anexada" className="max-h-60 w-full object-cover" />
+                <img src={mediaUrl} alt="Mídia anexada" className="h-full w-full object-contain" />
               )}
 
               <button
@@ -147,6 +189,7 @@ function PostButton() {
                 onClick={() => {
                   setMediaUrl(null);
                   setMediaType(null);
+                  setSelectedFile(null);
                 }}
                 className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white"
                 aria-label="Remover mídia"
@@ -157,7 +200,44 @@ function PostButton() {
           )}
         </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="rounded-xl border border-border bg-surface-2 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-medium text-foreground">Visibilidade</p>
+            <div className="inline-flex rounded-full border border-border bg-background p-1">
+              <button
+                type="button"
+                onClick={() => setVisibility("public")}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${visibility === "public" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+              >
+                Público
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisibility("private")}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${visibility === "private" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+              >
+                Privado
+              </button>
+            </div>
+          </div>
+
+          <p className="text-sm text-foreground">
+            {visibility === "public" ? "Público (todos podem ver)" : "Privado (apenas você e perfis aprovados)"}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface-2 p-4 text-sm text-foreground/90">
+          <p className="mb-2 font-medium">Não são permitidas postagens com:</p>
+          <ul className="space-y-1 text-muted-foreground">
+            <li>• Menores de idade</li>
+            <li>• Crimes sexuais</li>
+            <li>• Venda de conteúdo</li>
+            <li>• Drogas, remédios ou armas</li>
+            <li>• Número de telefone</li>
+          </ul>
+        </div>
+
+        <div className="sticky bottom-0 -mx-4 -mb-4 flex justify-end gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:border-t-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none">
           <button
             onClick={() => {
               resetDraft();
@@ -210,6 +290,7 @@ function Logo() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { isVip, toggleVip, openVipModal } = useVip();
+  const { unreadCount } = useSocial();
   const navigate = useNavigate();
 
   return (
@@ -217,7 +298,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="fixed inset-x-0 top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:px-4">
           <Logo />
-          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+          <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
             <label className="hidden items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 sm:flex">
               <span className="text-[11px] text-muted-foreground">Modo</span>
               <Switch checked={isVip} onCheckedChange={toggleVip} aria-label="Alternar Free/VIP" />
@@ -262,8 +343,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               activeProps={{ className: "bg-surface text-foreground border-border" }}
               className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-surface/70 hover:text-foreground"
             >
-              <Icon className="h-4.5 w-4.5" />
-              {label}
+              <span className="relative">
+                <Icon className="h-4.5 w-4.5" />
+                {to === "/notificacoes" && unreadCount > 0 && (
+                  <span className="absolute -right-2 -top-2 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </span>
+              <span>{label}</span>
             </Link>
           ))}
           <Link
@@ -290,9 +378,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               key={to}
               to={to}
               activeProps={{ className: "text-primary-glow" }}
-              className="flex flex-col items-center gap-1 py-2.5 text-[10px] text-muted-foreground"
+              className="relative flex flex-col items-center gap-1 py-2.5 text-[10px] text-muted-foreground"
             >
-              <Icon className="h-5 w-5" />
+              <span className="relative">
+                <Icon className="h-5 w-5" />
+                {to === "/notificacoes" && unreadCount > 0 && (
+                  <span className="absolute -right-2 -top-2 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </span>
               {label}
             </Link>
           ))}

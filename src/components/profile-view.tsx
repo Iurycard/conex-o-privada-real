@@ -27,8 +27,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AvatarOrb, MediaBlock, TypeBadge, VipBadge } from "@/components/bits";
+import { openPostComposer } from "@/components/app-shell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,8 +42,8 @@ import { useProfiles } from "@/context/profiles-context";
 import { useVip, FREE_LIKE_LIMIT } from "@/context/vip";
 import { useSocial } from "@/hooks/use-social";
 import { useAuth } from "@/hooks/use-auth";
-import { uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
-import type { Profile } from "@/lib/mock-data";
+import { useAlbumUrls } from "@/lib/album-storage";
+import type { Post, PostComment, Profile } from "@/context/profiles-context";
 
 
 function nf(n: number) {
@@ -49,13 +51,49 @@ function nf(n: number) {
   return String(n);
 }
 
-function seeded(seed: string, min: number, max: number) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 100000;
-  return min + (h % (max - min + 1));
+function ageFrom(birthDate: string | null) {
+  if (!birthDate) return null;
+  const birth = new Date(`${birthDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const birthdayPassed = today.getMonth() > birth.getMonth()
+    || (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+  if (!birthdayPassed) age -= 1;
+  return age >= 0 ? age : null;
 }
 
-const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+function distanceBetweenProfiles(profile: Profile, viewer: Profile | null) {
+  if (profile.city && viewer?.city && profile.city.trim().toLowerCase() === viewer.city.trim().toLowerCase()) {
+    return "0 km";
+  }
+
+  if (
+    typeof profile.latitude !== "number" || typeof profile.longitude !== "number"
+    || typeof viewer?.latitude !== "number" || typeof viewer.longitude !== "number"
+  ) {
+    return "Distância indisponível";
+  }
+
+  const earthRadiusKm = 6371;
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const latitudeDelta = toRadians(viewer.latitude - profile.latitude);
+  const longitudeDelta = toRadians(viewer.longitude - profile.longitude);
+  const latitudeOne = toRadians(profile.latitude);
+  const latitudeTwo = toRadians(viewer.latitude);
+  const a = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(latitudeOne) * Math.cos(latitudeTwo) * Math.sin(longitudeDelta / 2) ** 2;
+  const distance = earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return `${Math.round(distance)} km`;
+}
+
+function memberSince(createdAt: string | null) {
+  if (!createdAt) return "Data indisponível";
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return "Data indisponível";
+  return `Desde ${date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`;
+}
 
 function LikeAndCommentsRow({
   likes,
@@ -103,41 +141,73 @@ function LikeAndCommentsRow({
 
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
-  const { profiles, posts, blockProfile, updateCurrentAlbums, isBlocked, unblockProfile, createPost } = useProfiles();
+  const {
+    profiles,
+    posts,
+    blockProfile,
+    isBlocked,
+    unblockProfile,
+    createPost,
+    currentId,
+    likePost,
+    isPostLiked,
+    addComment,
+    getPostComments,
+    updatePost,
+    deletePost,
+  } = useProfiles();
   const { isVip, openVipModal, tryUseLike, likesUsedToday } = useVip();
   const social = useSocial();
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [lightbox, setLightbox] = useState<{ photos: number[]; index: number; album: "public" | "private" } | null>(null);
   const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [galleryLikes, setGalleryLikes] = useState<Record<number, number>>({ 0: 128, 1: 96, 2: 143, 3: 109, 4: 176, 5: 132 });
+  const [galleryLikes, setGalleryLikes] = useState<Record<number, number>>({});
   const [galleryLiked, setGalleryLiked] = useState<Record<number, boolean>>({});
-  const [galleryComments, setGalleryComments] = useState<Record<number, number>>({ 0: 16, 1: 11, 2: 18, 3: 14, 4: 22, 5: 17 });
+  const [galleryComments, setGalleryComments] = useState<Record<number, number>>({});
   const [likesModalOpen, setLikesModalOpen] = useState(false);
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
+  const [selectedPostComments, setSelectedPostComments] = useState<PostComment[]>([]);
+  const [selectedAlbumPhoto, setSelectedAlbumPhoto] = useState<{ profileId: string; photoPath: string } | null>(null);
+  const [loadingPostComments, setLoadingPostComments] = useState(false);
+  const [editPost, setEditPost] = useState<Post | null>(null);
+  const [editedPostText, setEditedPostText] = useState("");
   const { current } = useProfiles();
   const activeProfile = profile ?? current;
-  const publicUrls = useAlbumUrls(activeProfile?.publicAlbum ??[]);
-  const privateUrls = useAlbumUrls(activeProfile?.privateAlbum ?? []);
+  const publicPosts = useMemo(
+    () => posts.filter(
+      (post) => post.author_id === activeProfile?.id
+        && !post.wall_profile_id
+        && post.media === "foto"
+        && Boolean(post.image),
+    ),
+    [activeProfile?.id, posts],
+  );
+  const publicPhotoPaths = useMemo(
+    () => publicPosts.map((post) => post.image).filter((image): image is string => Boolean(image)),
+    [publicPosts],
+  );
+  const publicUrls = useAlbumUrls(publicPhotoPaths);
+  const privateUrls = useAlbumUrls(activeProfile?.private_album ?? []);
+
+  useEffect(() => {
+    if (!lightbox || !activeProfile) return;
+    const index = lightbox.index;
+    const photoPath = publicPosts[index]?.image;
+    if (!photoPath) return;
+    const photoPost = publicPosts[index];
+    if (photoPost) {
+      setGalleryLikes((current) => ({ ...current, [index]: photoPost.likes }));
+      setGalleryLiked((current) => ({ ...current, [index]: isPostLiked(photoPost.id) }));
+      setGalleryComments((current) => ({ ...current, [index]: photoPost.comments }));
+    }
+  }, [activeProfile, isPostLiked, lightbox, publicPosts]);
 
    useEffect(() => {
     if (!isOwner && user && profile.id !== user.id) void social.registerVisit(profile.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.id, isOwner, user?.id]);
 
-  const stats = useMemo(
-    () => ({
-      views: seeded(profile.id + "v", 8000, 60000),
-      memberMonth: meses[seeded(profile.id + "m", 0, 11)]!,
-      memberYear: 2021 + seeded(profile.id + "y", 0, 4),
-      onlineHours: seeded(profile.id + "o", 1, 22),
-    }),
-    [profile.id],
-  );
-
- 
-  
   if (!current) {
     return <div className="p-8 text-center text-muted-foreground">Carregando perfil...</div> 
   }
@@ -206,7 +276,12 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     [social.albumRequests, profile.id],
   );
 
-  const timeline = useMemo(() => posts.filter((p) => p.authorId === profile.id), [posts, profile.id]);
+  const timeline = useMemo(
+    () => posts.filter((p) =>
+      p.wall_profile_id === profile.id || (p.wall_profile_id === null && p.author_id === profile.id),
+    ),
+    [posts, profile.id],
+  );
   const connectionProfiles = useMemo(() => {
     const ids = connectionsView === "followers" ? followersIds : followingIds;
     return ids.map((id) => profiles.find((p) => p.id === id)).filter((p): p is Profile => !!p);
@@ -215,40 +290,45 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     () => publicUrls.map((_, i) => profile.hue + i * 14),
     [publicUrls, profile.hue],
   );
-  const privateCount = canViewPrivateAlbum ? privateUrls.length : (profile.privateAlbum ?? []).length;
+  const privateCount = canViewPrivateAlbum ? privateUrls.length : (profile.private_album ?? []).length;
   const privatePhotos = useMemo(
     () => Array.from({ length: privateCount }, (_, i) => profile.hue + i * 21),
     [privateCount, profile.hue],
   );
   const likesLeft = Math.max(0, FREE_LIKE_LIMIT - likesUsedToday);
 
-  async function handleUpload(kind: "public" | "private", files: FileList | null) {
-    if (!files?.length || !user) return;
-    setUploading(true);
-    try {
-      const paths = await uploadAlbumPhotos(user.id, kind, Array.from(files));
-      const existing = (kind === "public" ? profile.publicAlbum : profile.privateAlbum) ?? [];
-      updateCurrentAlbums(kind, [...paths, ...existing]);
-      toast.success(paths.length > 1 ? "Fotos enviadas" : "Foto enviada");
-    } catch {
-      toast.error("Não foi possível enviar a foto");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-
-  const bio = `${profile.bio} ${profile.age} anos. Curtimos drinks 🍸, música boa 🎶, viagens ✈️ e encontros com respeito e discrição. Sem julgamentos, sem pressa — a conexão acontece naturalmente. Chamem no privado para trocar uma ideia.`;
+  const bio = profile.bio ?? "";
   const bioShort = bio.slice(0, 120);
 
+  async function openPostComments(postId: string) {
+    setSelectedAlbumPhoto(null);
+    setCommentsModalOpen(true);
+    setLoadingPostComments(true);
+    setSelectedPostComments(await getPostComments(postId));
+    setLoadingPostComments(false);
+  }
+
+  async function openAlbumComments(index: number) {
+    const photoPath = publicPosts[index]?.image;
+    if (!activeProfile || !photoPath) return;
+    setSelectedAlbumPhoto({ profileId: activeProfile.id, photoPath });
+    setCommentsModalOpen(true);
+    setLoadingPostComments(true);
+    const photoPost = publicPosts[index];
+    if (!photoPost) {
+      setSelectedPostComments([]);
+      setLoadingPostComments(false);
+      return;
+    }
+    setSelectedPostComments(await getPostComments(photoPost.id));
+    setLoadingPostComments(false);
+  }
+
   const info: Array<[typeof MapPin, string]> = [
-    [UserRound, profile.type.startsWith("Casal") ? "Casal · Bissexual" : "Heterossexual"],
-    [Home, profile.city],
-    [Cake, `${profile.age} anos`],
-    [Signpost, `+ de ${profile.distanceKm} km`],
-    [Search, "Busca: Homens, Casais"],
-    [CalendarDays, `Desde ${stats.memberMonth}/${stats.memberYear}`],
-    [Circle, `Online há ${stats.onlineHours} h`],
+    [Home, profile.city || "Cidade não informada"],
+    [Cake, ageFrom(profile.birth_date) === null ? "Idade não informada" : `${ageFrom(profile.birth_date)} anos`],
+    [Signpost, distanceBetweenProfiles(profile, current)],
+    [CalendarDays, memberSince(profile.created_at)],
   ];
 
   return (
@@ -264,14 +344,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         </button>
         <p className="min-w-0 flex-1 truncate text-sm font-semibold">@{profile.nick.toLowerCase().replace(/\s|&/g, "")}</p>
 
-        {isOwner ? (
-          <button
-            onClick={() => toast(isVip ? "Compositor aberto: você pode publicar fotos e vídeos" : "Compositor aberto: Free pode publicar fotos; vídeos são exclusivos VIP")}
-            className="inline-flex items-center gap-1.5 rounded-full bg-gradient-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-neon"
-          >
-            <PenSquare className="h-3.5 w-3.5" /> Postar
-          </button>
-        ) : (
+        {!isOwner && (
           <button
             onClick={() => {
               if (!following && !tryUseLike()) return;
@@ -311,12 +384,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 const value = window.prompt(`Escreva sua mensagem para o mural de ${profile.nick}`);
                 if (!value || !value.trim()) return;
 
-                createPost({
-                  text: value.trim(),
-                  authorId: profile.id,
+                void createPost({ text: value.trim(), wallProfileId: profile.id }).then((saved) => {
+                  if (saved) toast.success(`Publicação adicionada ao mural de ${profile.nick}`);
+                  else toast.error("Não foi possível salvar a publicação");
                 });
-
-                toast.success(`Publicação adicionada ao mural de ${profile.nick}`);
               }}
             >
               <PenSquare className="mr-2 h-4 w-4" /> Postar no mural
@@ -346,7 +417,13 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         <div className="absolute inset-x-0 -bottom-10 grid place-items-center">
           <span className={`rounded-full p-[3px] ${vip ? "bg-gradient-gold shadow-gold" : "bg-surface-2"}`}>
             <span className="block rounded-full bg-background p-[3px]">
-              <AvatarOrb profile={{ nick: profile.nick, hue: profile.hue, vip, avatar: profile.avatar }} size={92} ring={false} />
+              <AvatarOrb
+                profile={{ id: profile.id, nick: profile.nick, hue: profile.hue, vip, avatar: profile.avatar ?? null }}
+                size={92}
+                ring={false}
+                profileId={profile.id}
+                clickable
+              />
             </span>
           </span>
         </div>
@@ -354,7 +431,9 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
 
       <div className="px-4 pt-12 text-center md:px-0">
         <div className="flex items-center justify-center gap-2">
-          <h1 className="text-xl font-semibold">{profile.nick}</h1>
+          <Link to="/perfil/$id" params={{ id: profile.id }} className="text-xl font-semibold hover:underline" aria-label={`Ver perfil de ${profile.nick}`}>
+            {profile.nick}
+          </Link>
           {vip && <VipBadge />}
         </div>
         <div className="mt-2 flex justify-center">
@@ -364,7 +443,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         {/* MÉTRICAS */}
         <div className="mt-4 grid grid-cols-3 divide-x divide-border rounded-xl border border-border bg-surface py-3">
           <div>
-            <p className="text-base font-semibold">{nf(stats.views)}</p>
+            <p className="text-base font-semibold">{nf(visitors.length)}</p>
             <p className="text-[11px] text-muted-foreground">visualizações</p>
           </div>
           {([
@@ -529,12 +608,75 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
               )}
               {timeline.map((post) => (
                 <article key={post.id} className="overflow-hidden rounded-2xl border border-border bg-surface">
-                  <div className="flex items-center gap-2 p-3">
-                    <AvatarOrb profile={{ nick: profile.nick, hue: profile.hue, vip, avatar: profile.avatar }} size={34} />
+                  <div className="relative flex items-center gap-2 p-3">
+                    <AvatarOrb
+                      profile={
+                        post.profiles ?? {
+                          id: profile.id,
+                          nick: profile.nick,
+                          hue: profile.hue,
+                          vip,
+                          avatar: profile.avatar ?? null,
+                        }
+                      }
+                      size={34}
+                      profileId={post.profiles?.id ?? profile.id}
+                      clickable
+                    />
                     <div>
-                      <p className="text-sm font-medium">{profile.nick}</p>
-                      <p className="text-[11px] text-muted-foreground">{post.time}</p>
+                      <Link
+                        to="/perfil/$id"
+                        params={{ id: post.profiles?.id ?? profile.id }}
+                        className="text-sm font-medium hover:underline"
+                        aria-label={`Ver perfil de ${post.profiles?.nick ?? profile.nick}`}
+                      >
+                        {post.profiles?.nick ?? profile.nick}
+                      </Link>
+                      <p className="text-[11px] text-muted-foreground">
+                        {new Date(post.created_at).toLocaleDateString("pt-BR")}
+                      </p>
                     </div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                          type="button"
+                          aria-label={`Mais opções da publicação de ${post.profiles?.nick ?? profile.nick}`}
+                          className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 border-border bg-surface">
+                          <DropdownMenuItem onClick={() => navigate({ to: "/perfil/$id", params: { id: post.author_id } })}>
+                            <UserRound className="mr-2 h-4 w-4" /> Visitar perfil
+                          </DropdownMenuItem>
+                          {currentId === post.author_id ? (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditedPostText(post.text);
+                                  setEditPost(post);
+                                }}
+                              >
+                                <PenSquare className="mr-2 h-4 w-4" /> Editar publicação
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={async () => {
+                                  const removed = await deletePost(post.id);
+                                  if (removed) toast.success("Publicação removida");
+                                  else toast.error("Não foi possível remover a publicação");
+                                }}
+                              >
+                                <X className="mr-2 h-4 w-4" /> Remover publicação
+                              </DropdownMenuItem>
+                            </>
+                          ) : (
+                            <DropdownMenuItem onClick={() => toast.success("Publicação denunciada") }>
+                              <Flag className="mr-2 h-4 w-4" /> Denunciar publicação
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   <p className="px-3 pb-3 text-sm text-foreground/90">{post.text}</p>
                   <div className="relative">
@@ -559,9 +701,25 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                       </>
                     )}
                   </div>
-                  <div className="flex items-center gap-4 p-3 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {post.likes}</span>
-                    <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" /> {post.comments}</span>
+                  <div className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <Heart className="h-3.5 w-3.5" /> {post.likes}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLikesModalOpen(true)}
+                      className="text-[11px] font-medium text-primary-glow hover:underline"
+                    >
+                      Ver curtidas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void openPostComments(post.id)}
+                      className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2 py-1 hover:text-foreground"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>{post.comments}</span>
+                    </button>
                   </div>
                 </article>
               ))}
@@ -577,20 +735,13 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
 
               <TabsContent value="publico">
                 {isOwner && (
-                  <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-3 text-sm text-muted-foreground hover:text-foreground">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      disabled={uploading}
-                      onChange={(e) => {
-                        void handleUpload("public", e.target.files);
-                        e.target.value = "";
-                      }}
-                    />
-                    {uploading ? "Enviando…" : "Enviar fotos para o álbum público"}
-                  </label>
+                  <button
+                    type="button"
+                    onClick={() => openPostComposer("public")}
+                    className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-3 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Enviar fotos para o álbum público
+                  </button>
                 )}
                 <div className="mt-3 grid grid-cols-3 gap-2 pb-6">
                   {publicPhotos.map((h, i) => (
@@ -601,7 +752,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                         aria-label={`Abrir foto ${i + 1}`}
                         className="block w-full overflow-hidden rounded-xl"
                       >
-                        <MediaBlock hue={h} src={publicUrls[i]} alt={`Foto pública de ${profile.nick}`} className="aspect-square w-full" />
+                        <MediaBlock hue={h} src={publicUrls[i] ?? null} alt={`Foto pública de ${profile.nick}`} className="aspect-square w-full" />
                       </button>
 
                       <DropdownMenu>
@@ -633,27 +784,20 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
 
               <TabsContent value="privado">
                 {isOwner && (
-                  <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-gold/40 bg-gold/5 py-3 text-sm text-gold">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      disabled={uploading}
-                      onChange={(e) => {
-                        void handleUpload("private", e.target.files);
-                        e.target.value = "";
-                      }}
-                    />
-                    {uploading ? "Enviando…" : "Enviar fotos para o álbum privado"}
-                  </label>
+                  <button
+                    type="button"
+                    onClick={() => openPostComposer("private")}
+                    className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-gold/40 bg-gold/5 py-3 text-sm text-gold"
+                  >
+                    Enviar fotos para o álbum privado
+                  </button>
                 )}
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {privatePhotos.map((h, i) => (
                     <div key={i} className="relative aspect-square overflow-hidden rounded-xl">
                       <MediaBlock
                         hue={h}
-                        src={canViewPrivateAlbum ? privateUrls[i] : undefined}
+                        src={canViewPrivateAlbum ? (privateUrls[i] ?? null) : null}
                         alt={canViewPrivateAlbum ? `Foto privada de ${profile.nick}` : "Foto privada bloqueada"}
                         className={`h-full w-full ${canViewPrivateAlbum ? "" : "blur-lg"}`}
                       />
@@ -711,7 +855,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
               <div className="relative">
                 <MediaBlock
                   hue={lightbox.photos[lightbox.index] ?? 0}
-                  src={publicUrls[lightbox.index]}
+                  src={publicUrls[lightbox.index] ?? null}
                   alt={`Foto ${lightbox.index + 1} de ${profile.nick}`}
                   className="aspect-square w-full rounded-xl"
                 />
@@ -751,15 +895,11 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 comments={galleryComments[lightbox.index] ?? 0}
                 liked={galleryLiked[lightbox.index] ?? false}
                 onLike={() => {
-                  const currentlyLiked = galleryLiked[lightbox.index] ?? false;
-                  setGalleryLiked((current) => ({ ...current, [lightbox.index]: !currentlyLiked }));
-                  setGalleryLikes((current) => ({
-                    ...current,
-                    [lightbox.index]: Math.max(0, (current[lightbox.index] ?? 0) + (currentlyLiked ? -1 : 1)),
-                  }));
+                  const photoPost = publicPosts[lightbox.index];
+                  if (photoPost) void likePost(photoPost.id);
                 }}
                 onOpenLikes={() => setLikesModalOpen(true)}
-                onOpenComments={() => setCommentsModalOpen(true)}
+                onOpenComments={() => void openAlbumComments(lightbox.index)}
               />
             </div>
           )}
@@ -789,16 +929,101 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <DialogTitle>Comentários</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2 text-sm">
-            {[
-              { user: "Lia", text: "Foto incrível, muito boa!" },
-              { user: "Mika", text: "Perfeita essa composição." },
-              { user: "Dani", text: "To curtindo demais." },
-            ].map((comment) => (
-              <div key={comment.user} className="rounded-xl border border-border bg-surface-2 p-3">
-                <p className="font-medium text-foreground">{comment.user}</p>
-                <p className="mt-1 text-muted-foreground">{comment.text}</p>
-              </div>
-            ))}
+            {loadingPostComments ? (
+              <p className="text-muted-foreground">Carregando comentários...</p>
+            ) : selectedPostComments.length ? (
+              selectedPostComments.map((comment) => (
+                <div key={comment.id} className="rounded-xl border border-border bg-surface-2 p-3">
+                  <div className="flex items-start gap-2">
+                    <p className="min-w-0 flex-1 font-medium text-foreground">{comment.profile?.nick ?? "Perfil"}</p>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        type="button"
+                        aria-label={`Mais opções do comentário de ${comment.profile?.nick ?? "usuário"}`}
+                        className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-52 border-border bg-surface">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            if (comment.profile) void navigate({ to: "/perfil/$id", params: { id: comment.profile.id } });
+                          }}
+                        >
+                          <UserRound className="mr-2 h-4 w-4" /> Visitar perfil
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => toast.info("As curtidas deste comentário aparecerão aqui.") }>
+                          <Heart className="mr-2 h-4 w-4" /> Ver curtidas
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => toast.success("Comentário denunciado") }>
+                          <Flag className="mr-2 h-4 w-4" /> Denunciar comentário
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <p className="mt-1 text-muted-foreground">{comment.body}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-muted-foreground">Ainda não há comentários.</p>
+            )}
+          </div>
+          {selectedAlbumPhoto && (
+            <form
+              className="flex gap-2"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const input = event.currentTarget.elements.namedItem("album-comment");
+                if (!(input instanceof HTMLInputElement) || !input.value.trim()) return;
+                const photoPost = posts.find(
+                  (post) => post.author_id === selectedAlbumPhoto.profileId && !post.wall_profile_id && post.image === selectedAlbumPhoto.photoPath,
+                );
+                if (!photoPost) return;
+                await addComment(photoPost.id, input.value);
+                input.value = "";
+                await openAlbumComments(lightbox?.index ?? 0);
+              }}
+            >
+              <input name="album-comment" placeholder="Escreva um comentário..." className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+              <button type="submit" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">Comentar</button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editPost)} onOpenChange={(open) => !open && setEditPost(null)}>
+        <DialogContent className="border-border bg-surface">
+          <DialogHeader>
+            <DialogTitle>Editar publicação</DialogTitle>
+            <DialogDescription>Atualize o texto da sua publicação.</DialogDescription>
+          </DialogHeader>
+          <Textarea value={editedPostText} onChange={(event) => setEditedPostText(event.target.value)} rows={4} />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditPost(null)}
+              className="rounded-full border border-border px-4 py-2 text-xs text-muted-foreground"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={!editedPostText.trim() || !editPost}
+              onClick={async () => {
+                if (!editPost) return;
+                const updated = await updatePost(editPost.id, editedPostText);
+                if (!updated) {
+                  toast.error("Não foi possível editar a publicação");
+                  return;
+                }
+                setEditPost(null);
+                toast.success("Publicação atualizada");
+              }}
+              className="rounded-full bg-gradient-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              Salvar
+            </button>
           </div>
         </DialogContent>
       </Dialog>

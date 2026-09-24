@@ -6,6 +6,7 @@ import { useProfiles } from "@/context/profiles-context";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable/index";
 import { savePendingProfile } from "@/lib/pending-profile";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,6 +31,7 @@ export const Route = createFileRoute("/cadastro")({
 function SignupPage() {
   const [type, setType] = useState<AccountType>("Casal (Ele/Ela)");
   const [nick, setNick] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [city, setCity] = useState("");
@@ -68,13 +70,37 @@ function SignupPage() {
   const toggleLooking = (t: AccountType) =>
     setLookingFor((list) => (list.includes(t) ? list.filter((x) => x !== t) : [...list, t]));
 
+  const signUpWithGoogle = async () => {
+    if (!nick.trim() || !username.trim()) {
+      toast.error("Informe o nome do perfil e o usuário");
+      return;
+    }
+    savePendingProfile({
+      nick: nick.trim(),
+      username: username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
+      type,
+      city: city.trim(),
+      bio: bio.trim(),
+      hue: 300,
+      lookingFor,
+      orientation,
+    });
+    setBusy(true);
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: `${window.location.origin}/entrar`,
+    });
+    setBusy(false);
+    if (result.error) toast.error("Não foi possível continuar com o Google");
+  };
+
   const handleSubmit = async () => {
-    if (!nick.trim()) {
-      toast.error("Escolha um apelido para o perfil");
+    if (!nick.trim() || !username.trim()) {
+      toast.error("Informe o nome do perfil e o usuário");
       return;
     }
   const payload = {
       nick,
+      username: username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
       type,
       city,
       bio,
@@ -121,6 +147,7 @@ function SignupPage() {
 
     savePendingProfile({
       nick: nick.trim(),
+      username: username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
       type,
       city: city.trim(),
       bio: bio.trim(),
@@ -182,9 +209,30 @@ function SignupPage() {
             <Label htmlFor="nick" className="text-sm">Apelido do perfil</Label>
             <Input id="nick" value={nick} onChange={(e) => setNick(e.target.value)} placeholder="Ex.: L&M" className="mt-2 border-border bg-surface" />
           </div>
+          <div>
+            <Label htmlFor="username" className="text-sm">Usuário (@)</Label>
+            <Input
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.replace(/^@/, "").replace(/\s+/g, "_").toLowerCase())}
+              placeholder="Ex.: casal_lm"
+              className="mt-2 border-border bg-surface"
+            />
+          </div>
 
           {!user && (
             <>
+              <button
+                type="button"
+                onClick={() => void signUpWithGoogle()}
+                disabled={busy}
+                className="w-full rounded-full border border-border bg-surface py-3.5 text-sm font-medium text-foreground hover:bg-surface-2 disabled:opacity-60"
+              >
+                Continuar com Google
+              </button>
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> ou <span className="h-px flex-1 bg-border" />
+              </div>
               <div>
                 <Label htmlFor="email" className="text-sm">E-mail</Label>
                 <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" className="mt-2 border-border bg-surface" />
