@@ -18,7 +18,7 @@ export function AvatarOrb({
   const targetId = profileId ?? profile.id;
   const inner = (
     <span
-      className="grid place-items-center overflow-hidden rounded-full font-display text-sm font-semibold text-foreground"
+     className="relative block overflow-hidden rounded-full shrink-0"
       style={{
         width: size,
         height: size,
@@ -30,23 +30,25 @@ export function AvatarOrb({
           src={profile.avatar}
           alt={`Ilustração de perfil de ${profile.nick}`}
           loading="lazy"
-          width={size}
-          height={size}
-          className="h-full w-full object-cover"
-        />
+          className=" w-full h-full object-cover rounded-full block"
+/>
       ) : (
+        <span className="w-full h-full w-full items-center justify-center font-display text-sm font-semibold text-foreground/80 flex">
         profile.nick.slice(0, 2).toUpperCase()
+        </span>
       )}
     </span>
   );
 
   const wrapped = ring ? (
     <span
-      className={`inline-grid place-items-center rounded-full p-[2px] ${
+      className={`inline-flex shrink-0 items-center self-start justify-center rounded-full p-[2px] ${
         profile.vip ? "bg-gradient-gold" : "bg-surface-2"
       }`}
     >
-      <span className="rounded-full bg-background p-[2px]">{inner}</span>
+      <span className="block rounded-full bg-background p-[2px]">
+        {inner}
+        </span>
     </span>
   ) : (
     inner

@@ -27,7 +27,7 @@ export async function removeAlbumPhoto(path: string) {
   await supabase.storage.from(ALBUM_BUCKET).remove([path]);
 }
 
-export async function resolveAlbumUrls(paths: string[]): Promise<string[]> {
+export async function resolveAlbumUrls(paths: string[], legacyPrefix?: string): Promise<string[]> {
   const out: string[] = [];
   for (const path of paths) {
     if (!path) continue;
@@ -35,27 +35,39 @@ export async function resolveAlbumUrls(paths: string[]): Promise<string[]> {
       out.push(path);
       continue;
     }
-    const { data, error } = await supabase.storage.from(ALBUM_BUCKET).createSignedUrl(path, 60 * 60);
-    if (data?.signedUrl) out.push(data.signedUrl);
-    else if (error) console.error("Erro ao resolver foto do álbum:", path, error.message);
+
+    const candidates = [path];
+    if (legacyPrefix && !path.includes("/")) candidates.push(`${legacyPrefix}/${path}`);
+
+    let resolved: string | null = null;
+    for (const candidate of candidates) {
+      const { data } = await supabase.storage.from(ALBUM_BUCKET).createSignedUrl(candidate, 60 * 60);
+      if (data?.signedUrl) {
+        resolved = data.signedUrl;
+        break;
+      }
+    }
+
+    if (resolved) out.push(resolved);
+    else console.error("Erro ao resolver foto do álbum:", path);
   }
   return out;
 }
 
 /** Turns stored album entries (URLs or storage paths) into displayable URLs. */
-export function useAlbumUrls(paths: string[] | undefined) {
+export function useAlbumUrls(paths: string[] | undefined, legacyPrefix?: string) {
   const key = (paths ?? []).join("|");
   const [urls, setUrls] = useState<string[]>(() => (paths ?? []).filter((p) => p.startsWith("http")));
 
   useEffect(() => {
     let active = true;
-    void resolveAlbumUrls(key ? key.split("|") : []).then((next) => {
+    void resolveAlbumUrls(key ? key.split("|") : [], legacyPrefix).then((next) => {
       if (active) setUrls(next);
     });
     return () => {
       active = false;
     };
-  }, [key]);
+  }, [key, legacyPrefix]);
 
   return urls;
 }

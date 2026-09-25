@@ -19,7 +19,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState, type ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import {
@@ -42,7 +42,6 @@ import { useSocial } from "@/hooks/use-social";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
-import type { Post } from "@/context/profiles-context";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -266,22 +265,9 @@ function SettingsPage() {
   const [albumsOpen, setAlbumsOpen] = useState(false);
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
-  const [selectedPublicPost, setSelectedPublicPost] = useState<Post | null>(null);
 
   const privateAlbum = current?.private_album ?? [];
   const privateAlbumUrls = useAlbumUrls(privateAlbum);
-  const publicPosts = useMemo(
-    () => posts.filter(
-      (post) => post.author_id === current?.id
-        && !post.wall_profile_id
-        && post.media === "foto"
-        && Boolean(post.image),
-    ),
-    [current?.id, posts],
-  );
-  const publicPostUrls = useAlbumUrls(
-    publicPosts.map((post) => post.image).filter((image): image is string => Boolean(image)),
-  );
   const followerCount = current ? social.followersOf(current.id).length : 0;
   const followingCount = current ? social.followingOf(current.id).length : 0;
   const visitorProfiles = current
@@ -300,7 +286,7 @@ function SettingsPage() {
     navigate({ to: "/", replace: true });
   };
   
-  const albumCount = publicPosts.length + privateAlbum.length;
+  const albumCount = privateAlbum.length;
 
  const addPhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
   const file = event.target.files?.[0];
@@ -347,7 +333,7 @@ function SettingsPage() {
 
         <div className="space-y-6">
           <SettingsSection title="Métricas da conta">
-            <SettingsRow icon={Image} label="Meus álbuns" value={String(albumCount)} onClick={() => setAlbumsOpen(true)} />
+            <SettingsRow icon={Image} label="Álbum privado" value={String(albumCount)} onClick={() => setAlbumsOpen(true)} />
             <SettingsRow
               icon={Users}
               label="Amigos e seguidores"
@@ -481,38 +467,10 @@ function SettingsPage() {
       <Dialog open={albumsOpen} onOpenChange={setAlbumsOpen}>
         <DialogContent className="max-h-[88vh] overflow-y-auto rounded-xl border-border bg-surface sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Meus álbuns</DialogTitle>
-            <DialogDescription>Veja as fotos públicas e gerencie o álbum privado.</DialogDescription>
+            <DialogTitle>Álbum privado</DialogTitle>
+            <DialogDescription>Gerencie seu álbum privado.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6">
-            <section aria-labelledby="public-album-title">
-              <div className="mb-2 flex items-center justify-between">
-                <h3 id="public-album-title" className="text-sm font-semibold">Álbum público</h3>
-                <span className="text-xs text-muted-foreground">{publicPosts.length} foto(s)</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {publicPosts.map((post, index) => (
-                  <button
-                    key={post.id}
-                    type="button"
-                    onClick={() => setSelectedPublicPost(post)}
-                    className="aspect-square overflow-hidden rounded-lg bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    aria-label={`Abrir publicação de ${new Date(post.created_at).toLocaleDateString("pt-BR")}`}
-                  >
-                    <img
-                      src={publicPostUrls[index] ?? undefined}
-                      alt="Foto da publicação"
-                      className="h-full w-full object-cover transition-transform hover:scale-105"
-                    />
-                  </button>
-                ))}
-                {publicPosts.length === 0 && (
-                  <p className="col-span-3 py-6 text-center text-xs text-muted-foreground sm:col-span-4">
-                    Nenhuma publicação com foto.
-                  </p>
-                )}
-              </div>
-            </section>
             {([["private", "Álbum privado", privateAlbum]] as const).map(([album, title, photos]) => (
               <section key={album} aria-labelledby={`${album}-album-title`}>
                 <div className="mb-2 flex items-center justify-between">
@@ -544,36 +502,6 @@ function SettingsPage() {
               </section>
             ))}
           </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={selectedPublicPost !== null} onOpenChange={(open) => !open && setSelectedPublicPost(null)}>
-        <DialogContent className="rounded-xl border-border bg-surface sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Publicação com foto</DialogTitle>
-            <DialogDescription>
-              {selectedPublicPost && new Date(selectedPublicPost.created_at).toLocaleDateString("pt-BR")}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedPublicPost && (
-            <div className="space-y-3">
-              <img
-                src={publicPostUrls[publicPosts.findIndex((post) => post.id === selectedPublicPost.id)] ?? undefined}
-                alt="Foto da publicação"
-                className="max-h-[55vh] w-full rounded-lg object-contain"
-              />
-              {selectedPublicPost.text && <p className="text-sm text-foreground/90">{selectedPublicPost.text}</p>}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedPublicPost(null);
-                  navigate({ to: "/perfil/$id", params: { id: selectedPublicPost.author_id } });
-                }}
-                className="w-full rounded-lg bg-gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
-              >
-                Abrir publicação no perfil
-              </button>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
       <Dialog open={visitsOpen} onOpenChange={setVisitsOpen}>

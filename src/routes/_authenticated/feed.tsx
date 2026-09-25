@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Flag, Heart, MessageSquare, MoreHorizontal, Play, Lock, UserRound } from "lucide-react";
+import { Flag, Heart, MessageSquare, MoreHorizontal, Play, Lock, UserRound, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AvatarOrb, MediaBlock, VipBadge } from "@/components/bits";
@@ -29,7 +29,10 @@ export const Route = createFileRoute("/_authenticated/feed")({
   head: () => ({
     meta: [
       { title: "Feed — Conexão Privada" },
-      { name: "description", content: "Acompanhe publicações, stories de perfis próximos e eventos da comunidade." },
+      {
+        name: "description",
+        content: "Acompanhe publicações, stories de perfis próximos e eventos da comunidade.",
+      },
     ],
   }),
   component: FeedPage,
@@ -38,7 +41,16 @@ export const Route = createFileRoute("/_authenticated/feed")({
 function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][number] }) {
   const author = post.profiles;
   const { isVip, openVipModal } = useVip();
-  const { currentId, likePost, addComment, getPostLikes, getPostComments, updatePost, deletePost } = useProfiles();
+  const {
+    currentId,
+    likePost,
+    isPostLiked,
+    addComment,
+    getPostLikes,
+    getPostComments,
+    updatePost,
+    deletePost,
+  } = useProfiles();
   const navigate = useNavigate();
   const [comment, setComment] = useState("");
   const [likes, setLikes] = useState<ReturnType<typeof useProfiles>["profiles"]>([]);
@@ -46,6 +58,7 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
   const [loadingLikes, setLoadingLikes] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editedText, setEditedText] = useState(post.text);
   const isOwnPost = currentId === post.author_id;
@@ -80,9 +93,7 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
             </Link>
             {author.vip && <VipBadge />}
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            {author.city}
-          </p>
+          <p className="text-[11px] text-muted-foreground">{author.city}</p>
           <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
             <span>{new Date(post.created_at).toLocaleDateString()}</span>
           </div>
@@ -157,9 +168,17 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
               <DialogTitle>Editar publicação</DialogTitle>
               <DialogDescription>Atualize o texto da sua publicação.</DialogDescription>
             </DialogHeader>
-            <Textarea value={editedText} onChange={(event) => setEditedText(event.target.value)} rows={4} />
+            <Textarea
+              value={editedText}
+              onChange={(event) => setEditedText(event.target.value)}
+              rows={4}
+            />
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setEditOpen(false)} className="rounded-full border border-border px-4 py-2 text-xs text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setEditOpen(false)}
+                className="rounded-full border border-border px-4 py-2 text-xs text-muted-foreground"
+              >
                 Cancelar
               </button>
               <button
@@ -186,7 +205,19 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
       <p className="px-4 pb-3 text-sm text-foreground/90">{post.text}</p>
 
       {post.image && (
-        <FeedPhotoLightbox post={post} author={author} isVip={isVip} openVipModal={openVipModal} />
+        <FeedPhotoLightbox
+          post={post}
+          author={author}
+          isVip={isVip}
+          openVipModal={openVipModal}
+          isLiked={isPostLiked(post.id)}
+          onLike={() => void likePost(post.id)}
+          onOpenOptions={() => setOptionsOpen(true)}
+          onOpenComments={() => {
+            setCommentsOpen(true);
+            void loadComments();
+          }}
+        />
       )}
 
       <div className="flex items-center gap-2 border-t border-border/60 px-4 py-2">
@@ -196,7 +227,9 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
           className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-surface-2 hover:text-primary-glow"
           aria-label={`Curtir publicação de ${author.nick}`}
         >
-          <Heart className="h-4 w-4" />
+          <Heart
+            className={`h-4 w-4 ${isPostLiked(post.id) ? "fill-primary-glow text-primary-glow" : ""}`}
+          />
           <span>{post.likes}</span>
         </button>
 
@@ -219,7 +252,7 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
                 <p className="text-sm text-muted-foreground">Carregando curtidas...</p>
               ) : likes.length ? (
                 likes.map((profile) => (
-                  <div key={profile.id} className="flex items-center gap-3">
+                  <div key={profile.id} className="flex items-start gap-3">
                     <AvatarOrb profile={profile} size={36} />
                     <span className="text-sm font-medium">@{profile.nick}</span>
                   </div>
@@ -231,10 +264,17 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
           </DialogContent>
         </Dialog>
 
-        <Dialog onOpenChange={(open) => open && void loadComments()}>
+        <Dialog
+          open={commentsOpen}
+          onOpenChange={(open) => {
+            setCommentsOpen(open);
+            if (open) void loadComments();
+          }}
+        >
           <DialogTrigger asChild>
             <button
               type="button"
+              onClick={() => setCommentsOpen(true)}
               className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
             >
               <MessageSquare className="h-4 w-4" />
@@ -252,10 +292,16 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
               ) : comments.length ? (
                 comments.map((item) => (
                   <div key={item.id} className="flex gap-3">
-                    {item.profile ? <AvatarOrb profile={item.profile} size={32} /> : <div className="h-8 w-8 rounded-full bg-surface-2" />}
+                    {item.profile ? (
+                      <AvatarOrb profile={item.profile} size={32} ring={true} />
+                    ) : (
+                      <div className="h-8 w-8 rounded-full bg-surface-2" />
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start gap-2">
-                        <p className="min-w-0 flex-1 text-xs font-semibold">@{item.profile?.nick ?? "usuário"}</p>
+                        <p className="min-w-0 flex-1 text-xs font-semibold">
+                          @{item.profile?.nick ?? "usuário"}
+                        </p>
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             type="button"
@@ -264,19 +310,33 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
                           >
                             <MoreHorizontal className="h-4 w-4" />
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52 border-border bg-surface">
+                          <DropdownMenuContent
+                            align="end"
+                            className="w-52 border-border bg-surface"
+                          >
                             <DropdownMenuItem
                               onClick={() => {
-                                if (item.profile) void navigate({ to: "/perfil/$id", params: { id: item.profile.id } });
+                                if (item.profile)
+                                  void navigate({
+                                    to: "/perfil/$id",
+                                    params: { id: item.profile.id },
+                                  });
                               }}
                             >
-                              <UserRound className="mr-2 h-4 w-4" /> Visitar @{item.profile?.nick ?? "perfil"}
+                              <UserRound className="mr-2 h-4 w-4" /> Visitar @
+                              {item.profile?.nick ?? "perfil"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => toast.info("As curtidas deste comentário aparecerão aqui.") }>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                toast.info("As curtidas deste comentário aparecerão aqui.")
+                              }
+                            >
                               <Heart className="mr-2 h-4 w-4" /> Ver curtidas
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => toast.success("Comentário denunciado") }>
+                            <DropdownMenuItem
+                              onClick={() => toast.success("Comentário denunciado")}
+                            >
                               <Flag className="mr-2 h-4 w-4" /> Denunciar comentário
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -328,29 +388,30 @@ function FeedPhotoLightbox({
   author,
   isVip,
   openVipModal,
+  isLiked,
+  onLike,
+  onOpenOptions,
+  onOpenComments,
 }: {
   post: ReturnType<typeof useProfiles>["posts"][number];
   author: NonNullable<ReturnType<typeof useProfiles>["posts"][number]["profiles"]>;
   isVip: boolean;
   openVipModal: () => void;
+  isLiked: boolean;
+  onLike: () => void;
+  onOpenOptions: () => void;
+  onOpenComments: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [index, setIndex] = useState(0);
-  const photoPaths = useMemo(() => {
-    const album = author.public_album ?? [];
-    if (!post.image || album.includes(post.image)) return album;
-    return [post.image, ...album];
-  }, [author.public_album, post.image]);
-  const photoUrls = useAlbumUrls(photoPaths);
-  const initialIndex = Math.max(0, photoPaths.indexOf(post.image ?? ""));
+  const photoUrls = useAlbumUrls(post.image ? [post.image] : [], `${author.id}/public`);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button type="button" className="relative block w-full text-left" onClick={() => setIndex(initialIndex)}>
+        <button type="button" className="relative block w-full text-left">
           <MediaBlock
             hue={author.hue}
-            src={post.image}
+            src={photoUrls[0] ?? null}
             alt={`Ilustração do post de ${author.nick}`}
             className="aspect-[4/3] w-full"
           />
@@ -374,28 +435,63 @@ function FeedPhotoLightbox({
           )}
         </button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl border-border bg-surface">
-        <DialogHeader>
-          <DialogTitle>Álbum público de {author.nick}</DialogTitle>
-          <DialogDescription>Fotos públicas relacionadas às publicações de {author.nick}.</DialogDescription>
-        </DialogHeader>
-        <div className="relative">
-          <MediaBlock
-            hue={author.hue + index * 14}
-            src={photoUrls[index] ?? photoPaths[index] ?? null}
-            alt={`Foto ${index + 1} de ${author.nick}`}
-            className="aspect-square w-full rounded-xl"
-          />
-          {photoPaths.length > 1 && (
-            <>
-              <button type="button" aria-label="Foto anterior" onClick={() => setIndex((current) => (current - 1 + photoPaths.length) % photoPaths.length)} className="absolute left-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground">
-                &#8249;
-              </button>
-              <button type="button" aria-label="Próxima foto" onClick={() => setIndex((current) => (current + 1) % photoPaths.length)} className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground">
-                &#8250;
-              </button>
-            </>
-          )}
+      <DialogContent className="!left-0 !top-0 !translate-x-0 !translate-y-0 inset-0 flex h-[100dvh] w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-black p-0 text-white [&>button:last-child]:hidden">
+        <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-black/90 px-4">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label="Fechar publicação"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <AvatarOrb profile={author} size={36} profileId={author.id} clickable />
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onOpenOptions();
+            }}
+            className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            aria-label={`Mais opções da postagem de ${author.nick}`}
+          >
+            <MoreHorizontal className="h-5 w-5" />
+          </button>
+        </header>
+
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-3 sm:p-6">
+          <div className="relative flex max-h-full max-w-full items-center justify-center">
+            <MediaBlock
+              hue={author.hue}
+              src={photoUrls[0] ?? null}
+              alt={`Foto de ${author.nick}`}
+              className="h-[min(70vw,calc(100dvh-9rem))] w-[min(70vw,calc(100dvh-9rem))] max-w-full rounded-lg sm:rounded-xl"
+            />
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-5 border-t border-white/10 bg-black/90 px-5 py-4">
+          <button
+            type="button"
+            onClick={onLike}
+            className="inline-flex items-center gap-2 text-sm text-white transition-colors hover:text-primary-glow"
+            aria-label={`Curtir publicação de ${author.nick}`}
+          >
+            <Heart className={`h-5 w-5 ${isLiked ? "fill-primary-glow text-primary-glow" : ""}`} />
+            <span>{post.likes}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onOpenComments();
+            }}
+            className="inline-flex items-center gap-2 text-sm text-white transition-colors hover:text-primary-glow"
+            aria-label={`Abrir comentários da publicação de ${author.nick}`}
+          >
+            <MessageSquare className="h-5 w-5" />
+            <span>{post.comments}</span>
+          </button>
         </div>
       </DialogContent>
     </Dialog>

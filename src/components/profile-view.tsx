@@ -24,7 +24,7 @@ import {
   X,
   Eye,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AvatarOrb, MediaBlock, TypeBadge, VipBadge } from "@/components/bits";
 import { openPostComposer } from "@/components/app-shell";
@@ -43,6 +43,35 @@ import { useVip, FREE_LIKE_LIMIT } from "@/context/vip";
 import { useSocial } from "@/hooks/use-social";
 import { useAuth } from "@/hooks/use-auth";
 import { useAlbumUrls } from "@/lib/album-storage";
+
+function ProfilePostMedia({ post, profile, vip }: { post: Post; profile: Profile; vip: boolean }) {
+  const urls = useAlbumUrls(post.image ? [post.image] : [], `${post.author_id}/public`);
+
+  return (
+    <div className="relative">
+      <MediaBlock
+        hue={profile.hue + 18}
+        src={urls[0] ?? null}
+        alt={`Ilustração do post de ${profile.nick}`}
+        className="aspect-[4/3] w-full"
+      />
+      {post.media === "video" && (
+        <>
+          <button
+            aria-label="Reproduzir vídeo"
+            onClick={() => toast("Reproduzindo vídeo")}
+            className="absolute inset-0 grid place-items-center"
+          >
+            <span className="grid h-12 w-12 place-items-center rounded-full bg-background/70 backdrop-blur">
+              <Play className="h-5 w-5 fill-current" />
+            </span>
+          </button>
+          {vip && <VipBadge className="absolute right-2 top-2 opacity-90" />}
+        </>
+      )}
+    </div>
+  );
+}
 import type { Post, PostComment, Profile } from "@/context/profiles-context";
 
 
@@ -117,7 +146,7 @@ function LikeAndCommentsRow({
         onClick={onLike}
         className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2 py-1 hover:text-foreground"
       >
-        <Heart className={`h-3.5 w-3.5 ${liked ? "fill-current text-primary-glow" : ""}`} />
+        <Heart className={`h-3.5 w-3.5 ${liked ? "fill-primary-glow text-primary-glow" : ""}`} />
         <span>{likes}</span>
       </button>
       <button
@@ -160,11 +189,12 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
   const social = useSocial();
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
-  const [lightbox, setLightbox] = useState<{ photos: number[]; index: number; album: "public" | "private" } | null>(null);
+  const [lightbox, setLightbox] = useState<{ index: number } | null>(null);
   const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
   const [galleryLikes, setGalleryLikes] = useState<Record<number, number>>({});
   const [galleryLiked, setGalleryLiked] = useState<Record<number, boolean>>({});
   const [galleryComments, setGalleryComments] = useState<Record<number, number>>({});
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [likesModalOpen, setLikesModalOpen] = useState(false);
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
   const [selectedPostComments, setSelectedPostComments] = useState<PostComment[]>([]);
@@ -187,7 +217,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     () => publicPosts.map((post) => post.image).filter((image): image is string => Boolean(image)),
     [publicPosts],
   );
-  const publicUrls = useAlbumUrls(publicPhotoPaths);
+  const publicUrls = useAlbumUrls(publicPhotoPaths, `${profile.id}/public`);
   const privateUrls = useAlbumUrls(activeProfile?.private_album ?? []);
 
   useEffect(() => {
@@ -208,47 +238,8 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.id, isOwner, user?.id]);
 
-  if (!current) {
-    return <div className="p-8 text-center text-muted-foreground">Carregando perfil...</div> 
-  }
   const targetProfileId = profile?.id ??current?.id;
    const blocked = targetProfileId ? isBlocked(targetProfileId) : false;
-
-  if (blocked) {
-    return (
-      <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-0">
-        <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-muted text-muted-foreground">
-            <Ban className="h-5 w-5" />
-          </div>
-          <h2 className="mt-4 text-xl font-semibold">Perfil bloqueado</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Você bloqueou {profile.nick}. Esse perfil vai ficar oculto até você desbloquear.
-          </p>
-          <div className="mt-5 flex justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                unblockProfile(profile.id);
-                toast.success(`${profile.nick} desbloqueado`);
-                navigate({ to: "/explorar" });
-              }}
-              className="rounded-full bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
-            >
-              Desbloquear
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate({ to: "/explorar" })}
-              className="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
-            >
-              Voltar
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const vip = isOwner ? isVip || profile.vip : profile.vip;
   const access = social.albumAccess(profile.id);
@@ -286,10 +277,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     const ids = connectionsView === "followers" ? followersIds : followingIds;
     return ids.map((id) => profiles.find((p) => p.id === id)).filter((p): p is Profile => !!p);
   }, [connectionsView, followersIds, followingIds, profiles]);
-  const publicPhotos = useMemo(
-    () => publicUrls.map((_, i) => profile.hue + i * 14),
-    [publicUrls, profile.hue],
-  );
+  const publicPhotoTouchStart = useRef<number | null>(null);
   const privateCount = canViewPrivateAlbum ? privateUrls.length : (profile.private_album ?? []).length;
   const privatePhotos = useMemo(
     () => Array.from({ length: privateCount }, (_, i) => profile.hue + i * 21),
@@ -299,6 +287,46 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
 
   const bio = profile.bio ?? "";
   const bioShort = bio.slice(0, 120);
+
+  if (!current) {
+    return <div className="p-8 text-center text-muted-foreground">Carregando perfil...</div>;
+  }
+
+  if (blocked) {
+    return (
+      <div className="mx-auto w-full max-w-xl px-4 py-10 md:px-0">
+        <div className="rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-muted text-muted-foreground">
+            <Ban className="h-5 w-5" />
+          </div>
+          <h2 className="mt-4 text-xl font-semibold">Perfil bloqueado</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Você bloqueou {profile.nick}. Esse perfil vai ficar oculto até você desbloquear.
+          </p>
+          <div className="mt-5 flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                unblockProfile(profile.id);
+                toast.success(`${profile.nick} desbloqueado`);
+                navigate({ to: "/explorar" });
+              }}
+              className="rounded-full bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+            >
+              Desbloquear
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/explorar" })}
+              className="rounded-full border border-border px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              Voltar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   async function openPostComments(postId: string) {
     setSelectedAlbumPhoto(null);
@@ -415,17 +443,13 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           className="h-40 w-full"
         />
         <div className="absolute inset-x-0 -bottom-10 grid place-items-center">
-          <span className={`rounded-full p-[3px] ${vip ? "bg-gradient-gold shadow-gold" : "bg-surface-2"}`}>
-            <span className="block rounded-full bg-background p-[3px]">
               <AvatarOrb
                 profile={{ id: profile.id, nick: profile.nick, hue: profile.hue, vip, avatar: profile.avatar ?? null }}
                 size={92}
-                ring={false}
+                ring={true}
                 profileId={profile.id}
                 clickable
-              />
-            </span>
-          </span>
+              />  
         </div>
       </div>
 
@@ -721,6 +745,31 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                       <span>{post.comments}</span>
                     </button>
                   </div>
+                  <form
+                    className="flex gap-2 px-3 pb-3"
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      const text = commentDrafts[post.id]?.trim() ?? "";
+                      if (!text) return;
+                      await addComment(post.id, text);
+                      setCommentDrafts((drafts) => ({ ...drafts, [post.id]: "" }));
+                    }}
+                  >
+                    <input
+                      value={commentDrafts[post.id] ?? ""}
+                      onChange={(event) => setCommentDrafts((drafts) => ({ ...drafts, [post.id]: event.target.value }))}
+                      placeholder="Escreva um comentário..."
+                      className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                      aria-label={`Comentar na publicação de ${profile.nick}`}
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                      disabled={!commentDrafts[post.id]?.trim()}
+                    >
+                      Comentar
+                    </button>
+                  </form>
                 </article>
               ))}
             </div>
@@ -744,15 +793,15 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                   </button>
                 )}
                 <div className="mt-3 grid grid-cols-3 gap-2 pb-6">
-                  {publicPhotos.map((h, i) => (
+                  {publicPosts.map((post, i) => (
                     <div key={i} className="group relative overflow-hidden rounded-xl">
                       <button
                         type="button"
-                        onClick={() => setLightbox({ photos: publicPhotos, index: i, album: "public" })}
+                        onClick={() => setLightbox({ index: i })}
                         aria-label={`Abrir foto ${i + 1}`}
                         className="block w-full overflow-hidden rounded-xl"
                       >
-                        <MediaBlock hue={h} src={publicUrls[i] ?? null} alt={`Foto pública de ${profile.nick}`} className="aspect-square w-full" />
+                        <MediaBlock hue={profile.hue + i * 14} src={publicUrls[i] ?? null} alt={`Foto pública de ${profile.nick}`} className="aspect-square w-full" />
                       </button>
 
                       <DropdownMenu>
@@ -763,7 +812,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                           <MoreHorizontal className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-52 border-border bg-surface">
-                          <DropdownMenuItem onClick={() => setLightbox({ photos: publicPhotos, index: i, album: "public" })}>
+                          <DropdownMenuItem onClick={() => setLightbox({ index: i })}>
                             <Eye className="mr-2 h-4 w-4" /> Ver publicação
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => navigate({ to: "/perfil/$id", params: { id: profile.id } })}>
@@ -776,7 +825,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                       </DropdownMenu>
                     </div>
                   ))}
-                  {publicPhotos.length === 0 && (
+                  {publicPosts.length === 0 && (
                     <p className="col-span-3 py-6 text-center text-sm text-muted-foreground">Nenhuma foto ainda.</p>
                   )}
                 </div>
@@ -846,64 +895,89 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
       </div>
 
       <Dialog open={lightbox !== null} onOpenChange={(o) => !o && setLightbox(null)}>
-        <DialogContent className="max-w-md border-border bg-surface p-3">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Foto de {profile.nick}</DialogTitle>
-          </DialogHeader>
-          {lightbox !== null && (
-            <div className="space-y-3">
-              <div className="relative">
+        <DialogContent className="!left-0 !top-0 !translate-x-0 !translate-y-0 inset-0 flex h-[100dvh] w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-black p-0 text-white [&>button:last-child]:hidden">
+          {lightbox !== null && publicPosts[lightbox.index] && (
+            <>
+              <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-black/90 px-4">
+                <button
+                  type="button"
+                  onClick={() => setLightbox(null)}
+                  className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                  aria-label="Fechar publicação"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+                <AvatarOrb profile={profile} size={36} profileId={profile.id} clickable />
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    aria-label={`Mais opções da publicação de ${profile.nick}`}
+                    className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                  >
+                    <MoreHorizontal className="h-5 w-5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52 border-border bg-surface">
+                    <DropdownMenuItem onClick={() => navigate({ to: "/perfil/$id", params: { id: profile.id } })}>
+                      <UserRound className="mr-2 h-4 w-4" /> Visitar perfil
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => toast.success("Publicação denunciada")}>
+                      <Flag className="mr-2 h-4 w-4" /> Denunciar publicação
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </header>
+
+              <div
+                className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-3 sm:p-6"
+                onTouchStart={(event) => {
+                  publicPhotoTouchStart.current = event.touches[0]?.clientX ?? null;
+                }}
+                onTouchEnd={(event) => {
+                  const start = publicPhotoTouchStart.current;
+                  const end = event.changedTouches[0]?.clientX;
+                  publicPhotoTouchStart.current = null;
+                  if (start === null || end === undefined || Math.abs(end - start) < 48) return;
+                  setLightbox((current) => {
+                    if (!current) return null;
+                    const direction = end < start ? 1 : -1;
+                    return { index: (current.index + direction + publicPosts.length) % publicPosts.length };
+                  });
+                }}
+              >
+                <div className="relative flex max-h-full max-w-full items-center justify-center">
                 <MediaBlock
-                  hue={lightbox.photos[lightbox.index] ?? 0}
+                  hue={profile.hue + lightbox.index * 14}
                   src={publicUrls[lightbox.index] ?? null}
                   alt={`Foto ${lightbox.index + 1} de ${profile.nick}`}
-                  className="aspect-square w-full rounded-xl"
+                  className="h-[min(70vw,calc(100dvh-9rem))] w-[min(70vw,calc(100dvh-9rem))] max-w-full rounded-lg sm:rounded-xl"
                 />
-                <button
-                  onClick={() =>
-                    setLightbox((current) =>
-                      current
-                        ? { ...current, index: (current.index - 1 + current.photos.length) % current.photos.length }
-                        : null,
-                    )
-                  }
-                  aria-label="Foto anterior"
-                  className="absolute left-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground backdrop-blur transition-colors hover:bg-background"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() =>
-                    setLightbox((current) =>
-                      current
-                        ? { ...current, index: (current.index + 1) % current.photos.length }
-                        : null,
-                    )
-                  }
-                  aria-label="Próxima foto"
-                  className="absolute right-2 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/75 text-foreground backdrop-blur transition-colors hover:bg-background"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-                <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-background/75 px-2.5 py-1 text-[11px] text-foreground backdrop-blur">
-                  {lightbox.index + 1} / {lightbox.photos.length}
-                </span>
+                </div>
               </div>
 
-              <LikeAndCommentsRow
-                likes={galleryLikes[lightbox.index] ?? 0}
-                comments={galleryComments[lightbox.index] ?? 0}
-                liked={galleryLiked[lightbox.index] ?? false}
-                onLike={() => {
-                  const photoPost = publicPosts[lightbox.index];
-                  if (photoPost) void likePost(photoPost.id);
-                }}
-                onOpenLikes={() => setLikesModalOpen(true)}
-                onOpenComments={() => void openAlbumComments(lightbox.index)}
-              />
-            </div>
+              <div className="flex shrink-0 items-center gap-5 border-t border-white/10 bg-black/90 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const photoPost = publicPosts[lightbox.index];
+                    if (photoPost) void likePost(photoPost.id);
+                  }}
+                  className="inline-flex items-center gap-2 text-sm text-white transition-colors hover:text-primary-glow"
+                  aria-label={`Curtir publicação de ${profile.nick}`}
+                >
+                  <Heart className={`h-5 w-5 ${galleryLiked[lightbox.index] ? "fill-primary-glow text-primary-glow" : ""}`} />
+                  <span>{publicPosts[lightbox.index]?.likes ?? 0}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void openAlbumComments(lightbox.index)}
+                  className="inline-flex items-center gap-2 text-sm text-white transition-colors hover:text-primary-glow"
+                  aria-label={`Abrir comentários da publicação de ${profile.nick}`}
+                >
+                  <MessageSquare className="h-5 w-5" />
+                  <span>{publicPosts[lightbox.index]?.comments ?? 0}</span>
+                </button>
+              </div>
+            </>
           )}
-        
         </DialogContent>
       </Dialog>
 
