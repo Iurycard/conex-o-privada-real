@@ -10,7 +10,10 @@ import {
   Heart,
   Calendar,
   MessageCircle,
+  Menu,
+  X,
 } from "lucide-react";
+import { useState } from "react";
 
 import heroImage from "@/assets/hero-landing.jpg";
 import phonesImage from "@/assets/app-phones.jpg";
@@ -84,6 +87,8 @@ const mobileFeatures = [
 ];
 
 function Landing() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
       <AgeGate />
@@ -91,18 +96,48 @@ function Landing() {
       <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/25 blur-[140px]" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-[380px] w-[380px] rounded-full bg-primary-glow/15 blur-[130px]" />
 
-      <header className="relative mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
-        <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-gradient-primary shadow-neon">
-            <img src={logoImg} alt="Logo Conexão Privada" className="h-full w-full object-cover" />
-          </span>
-          <span className="font-display text-sm font-semibold">
-            Conexão <span className="text-primary-glow">Privada</span>
-          </span>
+      <header className="sticky top-0 z-50 border-b border-border/70 bg-background/95 backdrop-blur-xl">
+        <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-4 px-5">
+          <Link to="/" aria-label="Conexão Privada, início" className="flex shrink-0 items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-gradient-primary shadow-neon">
+              <img src={logoImg} alt="" className="h-full w-full object-cover" />
+            </span>
+            <span className="font-display text-sm font-semibold">
+              Conexão <span className="text-primary-glow">Privada</span>
+            </span>
+          </Link>
+          <nav aria-label="Navegação principal" className="hidden items-center gap-5 text-sm md:flex">
+            <Link to="/" className="text-foreground transition-colors hover:text-primary-glow">Início</Link>
+            <Link to="/blog" className="text-muted-foreground transition-colors hover:text-foreground">Blog</Link>
+            <a href="/#faq" className="text-muted-foreground transition-colors hover:text-foreground">FAQ</a>
+            <Link to="/termos-de-servico" className="text-muted-foreground transition-colors hover:text-foreground">Termos de serviço</Link>
+            <Link to="/contato" className="text-muted-foreground transition-colors hover:text-foreground">Contato</Link>
+          </nav>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link to="/entrar" className="hidden rounded-full bg-gradient-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-neon transition-opacity hover:opacity-90 sm:inline-flex">
+              Entrar
+            </Link>
+            <button
+              type="button"
+              aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={mobileMenuOpen}
+              onClick={() => setMobileMenuOpen((open) => !open)}
+              className="grid h-10 w-10 place-items-center rounded-md border border-border text-foreground md:hidden"
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
-        <Link to="/entrar" className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-primary px-7 py-3.5 text-sm font-semibold text-primary-foreground shadow-neon transition-all hover:opacity-90 hover:shadow-lg sm:w-auto">
-          Entrar
-        </Link>
+        {mobileMenuOpen && (
+          <nav aria-label="Navegação móvel" className="grid gap-1 border-t border-border/70 px-5 py-3 md:hidden">
+            <Link onClick={() => setMobileMenuOpen(false)} to="/" className="rounded-md px-3 py-2 text-sm hover:bg-surface-2">Início</Link>
+            <Link onClick={() => setMobileMenuOpen(false)} to="/blog" className="rounded-md px-3 py-2 text-sm hover:bg-surface-2">Blog</Link>
+            <a onClick={() => setMobileMenuOpen(false)} href="/#faq" className="rounded-md px-3 py-2 text-sm hover:bg-surface-2">FAQ</a>
+            <Link onClick={() => setMobileMenuOpen(false)} to="/termos-de-servico" className="rounded-md px-3 py-2 text-sm hover:bg-surface-2">Termos de serviço</Link>
+            <Link onClick={() => setMobileMenuOpen(false)} to="/contato" className="rounded-md px-3 py-2 text-sm hover:bg-surface-2">Contato</Link>
+            <Link onClick={() => setMobileMenuOpen(false)} to="/entrar" className="rounded-md px-3 py-2 text-sm text-primary-glow hover:bg-surface-2">Entrar</Link>
+          </nav>
+        )}
       </header>
 
       <main className="relative mx-auto max-w-6xl px-5 pb-24">
@@ -235,6 +270,24 @@ function Landing() {
           </div>
         </section>
 
+        <section id="faq" className="mt-24 scroll-mt-24">
+          <h2 className="text-2xl font-semibold md:text-3xl">Perguntas frequentes</h2>
+          <div className="mt-6 divide-y divide-border border-y border-border">
+            <article className="py-5">
+              <h3 className="text-base font-semibold">Quem pode participar?</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">A comunidade é destinada exclusivamente a pessoas maiores de 18 anos. O cadastro e o uso devem respeitar as regras da plataforma.</p>
+            </article>
+            <article className="py-5">
+              <h3 className="text-base font-semibold">Como funciona a privacidade?</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Você controla as informações do perfil e pode manter álbuns protegidos, compartilhando acesso apenas quando desejar.</p>
+            </article>
+            <article className="py-5">
+              <h3 className="text-base font-semibold">Como falo com o suporte?</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Acesse a página de <Link to="/contato" className="text-primary-glow underline underline-offset-4">Contato</Link> e envie sua solicitação.</p>
+            </article>
+          </div>
+        </section>
+
         <section className="mt-24 text-center">
           <h2 className="text-2xl font-semibold md:text-3xl">Pronto para entrar?</h2>
           <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
@@ -257,8 +310,47 @@ function Landing() {
         </section>
       </main>
 
-      <footer className="relative border-t border-border/60 py-6 text-center text-xs text-muted-foreground">
-        Protótipo visual · Conexão Privada · Conteúdo restrito a maiores de 18 anos
+      <footer className="relative border-t border-border/60 bg-surface/40 px-5 py-12">
+        <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-[minmax(0,2fr)_minmax(150px,0.8fr)_minmax(180px,0.8fr)]">
+          <div>
+            <Link to="/" className="font-display text-lg font-semibold">
+              Conexão <span className="text-primary-glow">Privada</span>
+            </Link>
+            <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
+              Um espaço para conhecer pessoas e viver novas conexões com respeito, discrição e
+              liberdade para escolher como cada encontro começa.
+            </p>
+            <p className="mt-4 text-sm text-muted-foreground">
+              Precisa de ajuda? <Link to="/contato" className="text-primary-glow underline underline-offset-4">Fale com o suporte</Link>
+            </p>
+          </div>
+
+          <div>
+            <h2 className="text-sm font-semibold">Links</h2>
+            <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
+              <li><Link to="/" className="transition-colors hover:text-foreground">Página inicial</Link></li>
+              <li><Link to="/entrar" className="transition-colors hover:text-foreground">Entrar</Link></li>
+              <li><Link to="/cadastro" className="transition-colors hover:text-foreground">Cadastre-se</Link></li>
+              <li><Link to="/contato" className="transition-colors hover:text-foreground">Contato com suporte</Link></li>
+              <li><Link to="/blog" className="transition-colors hover:text-foreground">Blog</Link></li>
+              <li><a href="/#faq" className="transition-colors hover:text-foreground">FAQ</a></li>
+              <li><Link to="/contato" className="transition-colors hover:text-foreground">Central de ajuda</Link></li>
+            </ul>
+          </div>
+
+          <div>
+            <h2 className="text-sm font-semibold">Legal</h2>
+            <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
+              <li><Link to="/termos-de-servico" className="transition-colors hover:text-foreground">Termos de serviço</Link></li>
+              <li><Link to="/termos-de-servico#privacidade" className="transition-colors hover:text-foreground">Política de privacidade</Link></li>
+              <li><Link to="/contato" className="transition-colors hover:text-foreground">Enviar uma denúncia</Link></li>
+            </ul>
+          </div>
+        </div>
+        <div className="mx-auto mt-10 flex max-w-6xl flex-col gap-2 border-t border-border/60 pt-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <span>Conexão Privada</span>
+          <span>Conteúdo destinado a maiores de 18 anos.</span>
+        </div>
       </footer>
     </div>
   );

@@ -11,11 +11,14 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as BlogRouteImport } from './routes/blog'
 import { Route as CadastroRouteImport } from './routes/cadastro'
+import { Route as ContatoRouteImport } from './routes/contato'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as SaidaRouteImport } from './routes/saida'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as TermosDeServicoRouteImport } from './routes/termos-de-servico'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedConfiguracoesRouteImport } from './routes/_authenticated/configuracoes'
@@ -40,9 +43,19 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BlogRoute = BlogRouteImport.update({
+  id: '/blog',
+  path: '/blog',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CadastroRoute = CadastroRouteImport.update({
   id: '/cadastro',
   path: '/cadastro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContatoRoute = ContatoRouteImport.update({
+  id: '/contato',
+  path: '/contato',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntrarRoute = EntrarRouteImport.update({
@@ -63,6 +76,11 @@ const SaidaRoute = SaidaRouteImport.update({
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermosDeServicoRoute = TermosDeServicoRouteImport.update({
+  id: '/termos-de-servico',
+  path: '/termos-de-servico',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
@@ -144,11 +162,14 @@ const AuthenticatedPerfilIdRoute = AuthenticatedPerfilIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/blog': typeof BlogRoute
   '/cadastro': typeof CadastroRoute
+  '/contato': typeof ContatoRoute
   '/entrar': typeof EntrarRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/termos-de-servico': typeof TermosDeServicoRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/chat': typeof AuthenticatedChatRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
@@ -166,11 +187,14 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/blog': typeof BlogRoute
   '/cadastro': typeof CadastroRoute
+  '/contato': typeof ContatoRoute
   '/entrar': typeof EntrarRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/termos-de-servico': typeof TermosDeServicoRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/chat': typeof AuthenticatedChatRoute
   '/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
@@ -189,11 +213,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/blog': typeof BlogRoute
   '/cadastro': typeof CadastroRoute
+  '/contato': typeof ContatoRoute
   '/entrar': typeof EntrarRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/saida': typeof SaidaRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/termos-de-servico': typeof TermosDeServicoRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/configuracoes': typeof AuthenticatedConfiguracoesRouteWithChildren
@@ -213,11 +240,14 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/blog'
     | '/cadastro'
+    | '/contato'
     | '/entrar'
     | '/redefinir-senha'
     | '/saida'
     | '/sitemap.xml'
+    | '/termos-de-servico'
     | '/admin'
     | '/chat'
     | '/configuracoes'
@@ -235,11 +265,14 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/blog'
     | '/cadastro'
+    | '/contato'
     | '/entrar'
     | '/redefinir-senha'
     | '/saida'
     | '/sitemap.xml'
+    | '/termos-de-servico'
     | '/admin'
     | '/chat'
     | '/configuracoes'
@@ -257,11 +290,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/blog'
     | '/cadastro'
+    | '/contato'
     | '/entrar'
     | '/redefinir-senha'
     | '/saida'
     | '/sitemap.xml'
+    | '/termos-de-servico'
     | '/_authenticated/admin'
     | '/_authenticated/chat'
     | '/_authenticated/configuracoes'
@@ -281,11 +317,14 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  BlogRoute: typeof BlogRoute
   CadastroRoute: typeof CadastroRoute
+  ContatoRoute: typeof ContatoRoute
   EntrarRoute: typeof EntrarRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   SaidaRoute: typeof SaidaRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  TermosDeServicoRoute: typeof TermosDeServicoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -304,11 +343,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/blog': {
+      id: '/blog'
+      path: '/blog'
+      fullPath: '/blog'
+      preLoaderRoute: typeof BlogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cadastro': {
       id: '/cadastro'
       path: '/cadastro'
       fullPath: '/cadastro'
       preLoaderRoute: typeof CadastroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contato': {
+      id: '/contato'
+      path: '/contato'
+      fullPath: '/contato'
+      preLoaderRoute: typeof ContatoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entrar': {
@@ -337,6 +390,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/termos-de-servico': {
+      id: '/termos-de-servico'
+      path: '/termos-de-servico'
+      fullPath: '/termos-de-servico'
+      preLoaderRoute: typeof TermosDeServicoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -512,11 +572,14 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  BlogRoute: BlogRoute,
   CadastroRoute: CadastroRoute,
+  ContatoRoute: ContatoRoute,
   EntrarRoute: EntrarRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,
   SaidaRoute: SaidaRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  TermosDeServicoRoute: TermosDeServicoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -170,7 +170,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       },
       registerVisit: async (id) => {
         if (!uid || id === uid) return;
-        await supabase.from("profile_visits").insert({ visitor_id: uid, profile_id: id });
+        await supabase
+          .from("profile_visits")
+          .upsert({ visitor_id: uid, profile_id: id }, { onConflict: "visitor_id,profile_id", ignoreDuplicates: true });
         await notify(id, "visit", "visitou seu perfil");
         void refresh();
       },

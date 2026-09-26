@@ -276,7 +276,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
             author_id: targetAuthorId,
             wall_profile_id: wallProfileId ?? null,
             text: message,
-            media: mediaType === "video" ? "video" : "foto",
+            media: mediaFile || mediaUrl ? (mediaType === "video" ? "video" : "foto") : null,
             image: finalImage ?? null,
           })
           .select("*, profiles!posts_author_id_fkey(*)")

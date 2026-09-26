@@ -202,6 +202,8 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
   const [loadingPostComments, setLoadingPostComments] = useState(false);
   const [editPost, setEditPost] = useState<Post | null>(null);
   const [editedPostText, setEditedPostText] = useState("");
+  const [wallPostOpen, setWallPostOpen] = useState(false);
+  const [wallPostText, setWallPostText] = useState("");
   const { current } = useProfiles();
   const activeProfile = profile ?? current;
   const publicPosts = useMemo(
@@ -409,13 +411,8 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
-                const value = window.prompt(`Escreva sua mensagem para o mural de ${profile.nick}`);
-                if (!value || !value.trim()) return;
-
-                void createPost({ text: value.trim(), wallProfileId: profile.id }).then((saved) => {
-                  if (saved) toast.success(`Publicação adicionada ao mural de ${profile.nick}`);
-                  else toast.error("Não foi possível salvar a publicação");
-                });
+                setWallPostText("");
+                setWallPostOpen(true);
               }}
             >
               <PenSquare className="mr-2 h-4 w-4" /> Postar no mural
@@ -703,14 +700,8 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                     </DropdownMenu>
                   </div>
                   <p className="px-3 pb-3 text-sm text-foreground/90">{post.text}</p>
-                  <div className="relative">
-                    <MediaBlock
-                      hue={profile.hue + 18}
-                      src={post.image}
-                      alt={`Ilustração do post de ${profile.nick}`}
-                      className="aspect-[4/3] w-full"
-                    />
-                    {post.media === "video" && (
+                  {post.image && <ProfilePostMedia post={post} profile={profile} vip={vip} />}
+                  {post.image && post.media === "video" && (
                       <>
                         <button
                           aria-label="Reproduzir vídeo"
@@ -723,8 +714,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                         </button>
                         {vip && <VipBadge className="absolute right-2 top-2 opacity-90" />}
                       </>
-                    )}
-                  </div>
+                  )}
                   <div className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1">
                       <Heart className="h-3.5 w-3.5" /> {post.likes}
@@ -1097,6 +1087,37 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
               className="rounded-full bg-gradient-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
             >
               Salvar
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={wallPostOpen} onOpenChange={setWallPostOpen}>
+        <DialogContent className="border-border bg-surface">
+          <DialogHeader>
+            <DialogTitle>Postar no mural de {profile.nick}</DialogTitle>
+            <DialogDescription>Escreva uma mensagem para este mural.</DialogDescription>
+          </DialogHeader>
+          <Textarea value={wallPostText} onChange={(event) => setWallPostText(event.target.value)} rows={4} />
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setWallPostOpen(false)} className="rounded-full border border-border px-4 py-2 text-xs text-muted-foreground">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={!wallPostText.trim()}
+              onClick={async () => {
+                const saved = await createPost({ text: wallPostText.trim(), wallProfileId: profile.id });
+                if (saved) {
+                  setWallPostOpen(false);
+                  toast.success(`Publicação adicionada ao mural de ${profile.nick}`);
+                } else {
+                  toast.error("Não foi possível salvar a publicação");
+                }
+              }}
+              className="rounded-full bg-gradient-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+            >
+              Publicar
             </button>
           </div>
         </DialogContent>
