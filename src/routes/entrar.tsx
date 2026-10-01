@@ -10,6 +10,27 @@ import { readPendingProfile, clearPendingProfile } from "@/lib/pending-profile";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const GOOGLE_OAUTH_STARTED_AT_KEY = "cp:google-oauth-started-at";
+const GOOGLE_OAUTH_MAX_AGE_MS = 5 * 60 * 1000;
+
+function markGoogleOAuthStarted() {
+  try {
+    sessionStorage.setItem(GOOGLE_OAUTH_STARTED_AT_KEY, String(Date.now()));
+  } catch {
+    // Storage may be unavailable in restricted browser contexts.
+  }
+}
+
+function consumeRecentGoogleOAuth() {
+  try {
+    const startedAt = Number(sessionStorage.getItem(GOOGLE_OAUTH_STARTED_AT_KEY));
+    sessionStorage.removeItem(GOOGLE_OAUTH_STARTED_AT_KEY);
+    return Number.isFinite(startedAt) && Date.now() - startedAt <= GOOGLE_OAUTH_MAX_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+
 export const Route = createFileRoute("/entrar")({
   head: () => ({
     meta: [
@@ -35,7 +56,11 @@ function LoginPage() {
   useEffect(() => {
     if (!user) return;
     const pending = readPendingProfile();
-    if (!pending) return;
+    if (!pending) {
+      if (consumeRecentGoogleOAuth()) navigate({ to: "/feed", replace: true });
+      return;
+    }
+    consumeRecentGoogleOAuth();
     setBusy(true);
     void addProfile(pending)
       .then(() => {
@@ -100,15 +125,23 @@ function LoginPage() {
   };
 
   const signInWithGoogle = async () => {
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
+    markGoogleOAuthStarted();
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: `${window.location.origin}/entrar`,
+      });
+      if (result.error) {
+        consumeRecentGoogleOAuth();
+        toast.error("Não foi possível entrar com o Google");
+        return;
+      }
+      if (result.redirected) return;
+      consumeRecentGoogleOAuth();
+      navigate({ to: "/feed" });
+    } catch {
+      consumeRecentGoogleOAuth();
       toast.error("Não foi possível entrar com o Google");
-      return;
     }
-    if (result.redirected) return;
-    navigate({ to: "/feed" });
   };
 
   return (

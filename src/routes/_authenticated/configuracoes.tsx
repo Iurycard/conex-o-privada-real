@@ -41,7 +41,7 @@ import { useVip } from "@/context/vip";
 import { useSocial } from "@/hooks/use-social";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
+import { removeAlbumPhoto, uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -73,6 +73,7 @@ type SettingsRowProps = {
   value?: string;
   onClick: () => void;
   destructive?: boolean;
+  danger?: boolean;
 };
 
 const general = [
@@ -89,10 +90,10 @@ const security = [
 ];
 
 const others = [
-  { icon: MessageCircle, label: "Contato com o suporte" },
-  { icon: FileText, label: "Termos de serviço" },
-  { icon: Shield, label: "Política de privacidade" },
-  { icon: Newspaper, label: "Blog" },
+  { icon: MessageCircle, label: "Contato com o suporte", to: "/contato" },
+  { icon: FileText, label: "Termos de serviço", to: "/termos-de-servico" },
+  { icon: Shield, label: "Política de privacidade", to: "/termos-de-servico", hash: "privacidade" },
+  { icon: Newspaper, label: "Blog", to: "/blog" },
 ];
 
 const interestOptions = [
@@ -214,7 +215,7 @@ function PrivacyDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
   );
 }
 
-function SettingsRow({ icon: Icon, label, description, value, onClick, destructive }: SettingsRowProps) {
+function SettingsRow({ icon: Icon, label, description, value, onClick, destructive, danger }: SettingsRowProps) {
   return (
     <Button
       type="button"
@@ -223,21 +224,22 @@ function SettingsRow({ icon: Icon, label, description, value, onClick, destructi
       className={cn(
         "min-h-14 w-full justify-start rounded-none px-4 py-3 text-sm hover:bg-surface-2 first:rounded-t-xl last:rounded-b-xl",
         destructive && "justify-center text-destructive hover:bg-destructive/10 hover:text-destructive",
+        danger && "text-destructive hover:bg-destructive/10 hover:text-destructive",
       )}
     >
       {Icon && (
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted-foreground">
+        <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg", danger ? "bg-destructive/10 text-destructive" : "bg-surface-2 text-muted-foreground")}>
           <Icon className="h-4 w-4" />
         </span>
       )}
       <span className="min-w-0 flex-1 text-left">
         <span className="block">{label}</span>
-        {description && <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{description}</span>}
+        {description && <span className={cn("mt-0.5 block text-xs font-normal", danger ? "text-destructive/70" : "text-muted-foreground")}>{description}</span>}
       </span>
       {!destructive && (
         <>
           {value && <span className="font-semibold text-foreground">{value}</span>}
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <ChevronRight className={cn("h-4 w-4", danger ? "text-destructive" : "text-muted-foreground")} />
         </>
       )}
     </Button>
@@ -298,19 +300,32 @@ function SettingsPage() {
     return;
   }
 
-  const [filePath] = await uploadAlbumPhotos(user.id, "private", [file]);
-  if (!filePath) {
+  try {
+    const [filePath] = await uploadAlbumPhotos(user.id, "private", [file]);
+    if (!filePath) {
+      toast.error("Não foi possível salvar a foto");
+      return;
+    }
+    const saved = await updatePrivateAlbum([filePath, ...privateAlbum]);
+    if (!saved) {
+      await removeAlbumPhoto(filePath);
+      toast.error("Não foi possível registrar a foto no álbum");
+      return;
+    }
+    toast.success("Foto adicionada ao álbum");
+  } catch {
     toast.error("Não foi possível salvar a foto");
-    return;
+  } finally {
+    event.target.value = "";
   }
-  updatePrivateAlbum([filePath, ...privateAlbum]);
-  
-  toast("Foto adicionada ao álbum com sucesso!");
-  event.target.value = "";
 };
-  const removePhoto = (index: number) => {
-    updatePrivateAlbum(privateAlbum.filter((_, photoIndex) => photoIndex !== index));
-    toast("Foto removida do álbum");
+  const removePhoto = async (index: number) => {
+    const saved = await updatePrivateAlbum(privateAlbum.filter((_, photoIndex) => photoIndex !== index));
+    if (!saved) {
+      toast.error("Não foi possível remover a foto do álbum");
+      return;
+    }
+    toast.success("Foto removida do álbum");
   };
 
   const showPrototype = (label: string) => toast(`${label}: recurso em demonstração`);
@@ -357,6 +372,7 @@ function SettingsPage() {
                   key={item.label}
                   icon={Icon}
                   {...rest}
+                  danger={item.label === "Perfis bloqueados"}
                   onClick={() => {
                     if (item.label === "Editar perfil") {
                       navigate({ to: "/editar-perfil" });
@@ -411,9 +427,16 @@ function SettingsPage() {
 
           <SettingsSection title="Outros">
             {others.map((item) => {
-              const { icon: Icon, ...rest } = item;
+              const Icon = item.icon;
 
-              return <SettingsRow key={item.label} icon={Icon} {...rest} onClick={() => showPrototype(item.label)} />;
+              return (
+                <SettingsRow
+                  key={item.label}
+                  icon={Icon}
+                  label={item.label}
+                  onClick={() => navigate({ to: item.to, ...(item.hash ? { hash: item.hash } : {}) })}
+                />
+              );
             })}
           </SettingsSection>
 

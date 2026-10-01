@@ -401,6 +401,20 @@ function SignupPage() {
           {busy ? "Criando…" : "Concluir cadastro"}
         </button>
 
+        <p className="mt-4 text-center text-xs leading-relaxed text-muted-foreground">
+          Ao criar sua conta, você concorda com os{" "}
+          <Link to="/termos-de-servico" className="font-medium text-primary-glow underline underline-offset-2">
+            termos de serviço
+          </Link>{" "}
+          e afirma que possui 18 anos ou mais.
+        </p>
+        <Link
+          to="/saida"
+          className="mt-2 block text-center text-xs text-primary-glow underline underline-offset-2"
+        >
+          Tenho menos de 18 - Sair
+        </Link>
+
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Já tem conta?{" "}
           <Link to="/entrar" className="font-semibold text-primary-glow">

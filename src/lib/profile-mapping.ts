@@ -31,7 +31,7 @@ function ageFrom(birthDate: string | null): number {
   return Math.max(18, Math.floor(diff / (365.25 * 24 * 3600 * 1000)));
 }
 
-export function rowToProfile(row: ProfileRow): Profile {
+export function rowToProfile(row: ProfileRow): Profile & { private_album: string[] } {
 
   return {
     id: row.id,
@@ -54,5 +54,6 @@ export function rowToProfile(row: ProfileRow): Profile {
     lookingFor: (row.looking_for ?? []) as AccountType[],
     publicAlbum: row.public_album ?? [],
     privateAlbum: row.private_album ?? [],
+    private_album: row.private_album ?? [],
   };
 }

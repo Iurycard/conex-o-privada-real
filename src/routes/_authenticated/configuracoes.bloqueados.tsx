@@ -20,8 +20,12 @@ function BlockedProfilesPage() {
   const { profiles, currentId, blockedIds, unblockProfile } = useProfiles();
   const blockedProfiles = profiles.filter((profile) => profile.id !== currentId && blockedIds.includes(profile.id));
 
-  const handleUnblock = (nick: string, id: string) => {
-    unblockProfile(id);
+  const handleUnblock = async (nick: string, id: string) => {
+    const removed = await unblockProfile(id);
+    if (!removed) {
+      toast.error("Não foi possível desbloquear este perfil");
+      return;
+    }
     toast.success(`${nick} desbloqueado`);
   };
 
@@ -64,8 +68,8 @@ function BlockedProfilesPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => handleUnblock(profile.nick, profile.id)}
-                className="shrink-0 border-border bg-transparent text-xs hover:bg-surface-2"
+                onClick={() => void handleUnblock(profile.nick, profile.id)}
+                className="shrink-0 border-destructive/30 bg-destructive/5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
                 Desbloquear
               </Button>

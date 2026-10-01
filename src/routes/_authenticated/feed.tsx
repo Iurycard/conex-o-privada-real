@@ -3,6 +3,7 @@ import { Flag, Heart, MessageSquare, MoreHorizontal, Play, Lock, UserRound, X } 
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AvatarOrb, MediaBlock, VipBadge } from "@/components/bits";
+import { ReportDialog, type ReportTarget } from "@/components/report-dialog";
 import { useVip } from "@/context/vip";
 import { useProfiles, type PostComment } from "@/context/profiles-context";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,8 +39,14 @@ export const Route = createFileRoute("/_authenticated/feed")({
   component: FeedPage,
 });
 
-function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][number] }) {
-  const author = post.profiles;
+export function PostCard({
+  post,
+  authorProfile,
+}: {
+  post: ReturnType<typeof useProfiles>["posts"][number];
+  authorProfile?: NonNullable<ReturnType<typeof useProfiles>["posts"][number]["profiles"]>;
+}) {
+  const author = post.profiles ?? authorProfile;
   const { isVip, openVipModal } = useVip();
   const {
     currentId,
@@ -61,6 +68,7 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editedText, setEditedText] = useState(post.text);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const isOwnPost = currentId === post.author_id;
 
   const loadLikes = async () => {
@@ -92,10 +100,6 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
               {author.nick}
             </Link>
             {author.vip && <VipBadge />}
-          </div>
-          <p className="text-[11px] text-muted-foreground">{author.city}</p>
-          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span>{new Date(post.created_at).toLocaleDateString()}</span>
           </div>
         </div>
 
@@ -152,10 +156,13 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
               ) : (
                 <button
                   type="button"
-                  onClick={() => toast.success("Perfil denunciado (protótipo)")}
-                  className="rounded-lg border border-border bg-surface-2 px-4 py-3 text-left text-sm hover:text-foreground"
+                  onClick={() => {
+                    setOptionsOpen(false);
+                    setReportTarget({ reportedProfileId: author.id, postId: post.id });
+                  }}
+                  className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-left text-sm text-destructive hover:bg-destructive/10"
                 >
-                  Denunciar
+                  Denunciar publicação
                 </button>
               )}
             </div>
@@ -335,7 +342,14 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => toast.success("Comentário denunciado")}
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => {
+                                setCommentsOpen(false);
+                                setReportTarget({
+                                  reportedProfileId: item.user_id,
+                                  details: `Comentário: ${item.body}`,
+                                });
+                              }}
                             >
                               <Flag className="mr-2 h-4 w-4" /> Denunciar comentário
                             </DropdownMenuItem>
@@ -379,6 +393,11 @@ function PostCard({ post }: { post: ReturnType<typeof useProfiles>["posts"][numb
           Comentar
         </button>
       </form>
+      <ReportDialog
+        open={Boolean(reportTarget)}
+        onOpenChange={(open) => !open && setReportTarget(null)}
+        target={reportTarget}
+      />
     </article>
   );
 }

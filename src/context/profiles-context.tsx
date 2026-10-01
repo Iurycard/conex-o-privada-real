@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { Tables } from "@/integrations/supabase/types";
 import { rowToProfile, type ProfileRow } from "@/lib/profile-mapping";
 import { clearPendingProfile, readPendingProfile } from "@/lib/pending-profile";
-import { uploadAlbumPhotos } from "@/lib/album-storage";
+import { removeAlbumPhoto, uploadAlbumPhotos } from "@/lib/album-storage";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -23,8 +23,6 @@ export type NewProfileInput = {
   longitude?: number | null;
 };
 
-const BLOCKED_STORAGE_KEY = "conexao-privada.blockedIds";
-
 type ProfilesContextValue = {
   profiles: Profile[];
   posts: Post[];
@@ -43,13 +41,13 @@ type ProfilesContextValue = {
   }) => Promise<boolean>;
   updatePost: (postId: string, text: string) => Promise<boolean>;
   deletePost: (postId: string) => Promise<boolean>;
-  updatePrivateAlbum: (photos: string[]) => void;
+  updatePrivateAlbum: (photos: string[]) => Promise<boolean>;
   updateCurrentProfile: (
     changes: Partial<Pick<Profile, "nick" | "type" | "gender" | "orientation" | "birth_date" | "city" | "bio" | "looking_for" | "avatar">>,
   ) => void;
   blockedIds: string[];
-  blockProfile: (id: string) => void;
-  unblockProfile: (id: string) => void;
+  blockProfile: (id: string) => Promise<boolean>;
+  unblockProfile: (id: string) => Promise<boolean>;
   isBlocked: (id: string) => boolean;
   isFollowing: (id: string) => boolean;
   toggleFollow: (id: string) => void;
@@ -70,32 +68,15 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
   const [fallbackId, setFallbackId] = useState<string | null>(null);
   const [following, setFollowing] = useState<Record<string, boolean>>({});
-  const [blockedIds, setBlockedIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = window.localStorage.getItem(BLOCKED_STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed)
-        ? parsed.filter((id: unknown): id is string => typeof id === "string")
-        : [];
-    } catch {
-      return [];
-    }
-  });
+  const [blockedIds, setBlockedIds] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(blockedIds));
-    }
-  }, [blockedIds]);
-  
 
   const loadData = useCallback(async () => {
     if (!user) {
       setDbProfiles([]);
       setPosts([]);
       setLikedPostIds(new Set());
+      setBlockedIds([]);
       return;
     }
 
@@ -142,6 +123,13 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       .from("post_likes")
       .select("post_id")
       .eq("user_id", user.id);
+    setLikedPostIds(new Set((likesData ?? []).map((like) => like.post_id)));
+
+    const { data: blockedData, error: blockedError } = await supabase
+      .from("user_blocks")
+      .select("blocked_id")
+      .eq("blocker_id", user.id);
+    if (!blockedError) setBlockedIds((blockedData ?? []).map((row) => row.blocked_id));
 
     if (user) {
       const { data: followsData } = await supabase
@@ -260,8 +248,18 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
             const currentProfile = profiles.find((profile) => profile.id === targetAuthorId);
             const currentAlbum = currentProfile?.private_album ?? [];
             const nextAlbum = [...new Set([path, ...currentAlbum])];
+            const { data: savedProfile, error } = await supabase
+              .from("profiles")
+              .update({ private_album: nextAlbum })
+              .eq("id", targetAuthorId)
+              .select("id")
+              .maybeSingle();
+            if (error || !savedProfile) {
+              await removeAlbumPhoto(path);
+              console.error("Erro ao salvar álbum privado:", error);
+              return false;
+            }
             patchDbProfile(targetAuthorId, { private_album: nextAlbum });
-            void supabase.from("profiles").update({ private_album: nextAlbum }).eq("id", targetAuthorId);
             return true;
           }
 
@@ -336,17 +334,20 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         setPosts(nextPosts);
         return true;
       },
-      updatePrivateAlbum: (photos) => {
+      updatePrivateAlbum: async (photos) => {
         if (user && currentId === user.id) {
-          patchDbProfile(currentId, { private_album: photos });
-          void supabase
+          const { data, error } = await supabase
             .from("profiles")
             .update({ private_album: photos })
             .eq("id", user.id)
-            .then(({ error }) => {
-              if (error) console.error("Erro ao salvar álbum:", error);
-            });
-          return;
+            .select("id")
+            .maybeSingle();
+          if (error || !data) {
+            console.error("Erro ao salvar álbum:", error);
+            return false;
+          }
+          patchDbProfile(currentId, { private_album: photos });
+          return true;
         }
         setLocalProfiles((list) =>
           list.map((profile) =>
@@ -355,6 +356,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
               : profile,
           ),
         );
+        return true;
       },
       updateCurrentProfile: (changes) => {
         if (user && currentId === user.id) {
@@ -380,8 +382,25 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         );
       },
       blockedIds,
-      blockProfile: (id) => setBlockedIds((ids) => (ids.includes(id) ? ids : [...ids, id])),
-      unblockProfile: (id) => setBlockedIds((ids) => ids.filter((blockedId) => blockedId !== id)),
+      blockProfile: async (id) => {
+        if (!user || id === user.id) return false;
+        if (blockedIds.includes(id)) return true;
+        const { error } = await supabase.from("user_blocks").insert({ blocker_id: user.id, blocked_id: id });
+        if (error) return false;
+        setBlockedIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
+        return true;
+      },
+      unblockProfile: async (id) => {
+        if (!user) return false;
+        const { error } = await supabase
+          .from("user_blocks")
+          .delete()
+          .eq("blocker_id", user.id)
+          .eq("blocked_id", id);
+        if (error) return false;
+        setBlockedIds((ids) => ids.filter((blockedId) => blockedId !== id));
+        return true;
+      },
       isBlocked: (id: string) => blockedIds.includes(id),
       isFollowing: (id: string) => !!following[id],
       toggleFollow: async (id: string) => {

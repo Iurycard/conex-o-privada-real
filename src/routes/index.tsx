@@ -18,7 +18,6 @@ import { useState } from "react";
 import heroImage from "@/assets/hero-landing.jpg";
 import phonesImage from "@/assets/app-phones.jpg";
 import logoImg from "@/assets/logo.png";
-import { AgeGate } from "@/components/age-gate";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -91,8 +90,6 @@ function Landing() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
-      <AgeGate />
-
       <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/25 blur-[140px]" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-[380px] w-[380px] rounded-full bg-primary-glow/15 blur-[130px]" />
 
@@ -342,7 +339,7 @@ function Landing() {
             <h2 className="text-sm font-semibold">Legal</h2>
             <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
               <li><Link to="/termos-de-servico" className="transition-colors hover:text-foreground">Termos de serviço</Link></li>
-              <li><Link to="/termos-de-servico#privacidade" className="transition-colors hover:text-foreground">Política de privacidade</Link></li>
+              <li><Link to="/termos-de-servico" hash="privacidade" className="transition-colors hover:text-foreground">Política de privacidade</Link></li>
               <li><Link to="/contato" className="transition-colors hover:text-foreground">Enviar uma denúncia</Link></li>
             </ul>
           </div>

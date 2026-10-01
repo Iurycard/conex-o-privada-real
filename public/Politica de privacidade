@@ -1,0 +1,66 @@
+Última atualização: 16 de julho de 2025
+
+A plataforma D4swing respeita sua privacidade e cumpre integralmente a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 – LGPD), o Marco Civil da Internet (Lei nº 12.965/2014) e demais legislações aplicáveis.
+
+1. Dados Coletados e Finalidade
+Ao criar um perfil no site, coletamos os seguintes dados:
+
+Dados obrigatórios e validados:
+E-mail (A) e número de celular (B), ambos validados via token.
+Finalidade: identificação, autenticação, comunicação e segurança da conta.
+Base legal: execução de contrato (Art. 7º, V da LGPD).
+Dados opcionais não validados:
+Nome, endereço, sexo, idade e preferências.
+Finalidade: personalizar recomendações e melhorar a experiência do usuário.
+Base legal: consentimento (Art. 7º, I da LGPD).
+Logs de acesso:
+IP e Porta (C) de cada acesso, armazenados por 6 meses.
+Base legal: obrigação legal – Marco Civil da Internet, Art. 15.
+2. Dados Financeiros e Faturamento
+No pagamento com Cartão de Crédito, seus dados são enviados de forma segura ao nosso intermediador financeiro, que está em conformidade com a LGPD.
+Os dados são tokenizados, ou seja, armazenados com segurança vinculada ao nosso CNPJ.
+Armazenamos apenas os últimos 4 dígitos do cartão e o resultado da transação (“aprovado” ou “reprovado”).
+No pagamento via PIX, geramos QR Code. Após pagamento, recebemos do banco a confirmação de “pago” por meio de webhook.
+Na emissão de Nota Fiscal, informamos apenas o e-mail cadastrado.
+3. Compartilhamento de Dados
+Não compartilhamos nem comercializamos seus dados dos usuários para terceiros salvo os seguintes casos (mediante documentação oficial):
+
+Solicitação de autoridade policial;
+Requisição do Ministério Público;
+Ordem judicial.
+Nesses casos, além dos dados da plataforma, podemos consultar nossos intermediários de pagamento em busca de informações complementares, respeitando os limites legais.
+
+4. Armazenamento e Segurança
+Os dados são armazenados em provedores em nuvem (AWS, Google Cloud e Cloudflare), todos com alto padrão de segurança e conformidade com a LGPD.
+O acesso aos dados é restrito a usuários autorizados e feito apenas com autenticação (login/senha).
+Implementamos medidas técnicas e administrativas para proteção dos dados, incluindo criptografia, firewalls e controle de acesso.
+A utilização desses provedores pode implicar transferência internacional de dados, conforme autorizado pelo Art. 33 da LGPD, e é feita com garantias de proteção adequadas.
+5. Direitos dos Titulares
+O usuário poderá, a qualquer momento, exercer os seguintes direitos (Art. 18 da LGPD):
+
+Confirmar se realizamos o tratamento de seus dados;
+Acessar seus dados pessoais;
+Corrigir dados incompletos ou desatualizados;
+Solicitar a exclusão (eliminação) de seus dados;
+Revogar consentimento;
+Remover imediatamente seu conteúdo do site, incluindo perfil, fotos, postagens ou comentários.
+As solicitações podem ser feitas pelo canal de atendimento disponível no site.
+
+6. Remoção de Dados
+Usuários comuns (não assinantes, não bloqueados): dados excluídos em até 5 dias após a solicitação.
+Usuários assinantes: dados são excluídos após o término da assinatura, salvo solicitação de remoção anterior.
+Usuários bloqueados por violação das regras: dados são retidos por até 60 dias.
+Usuários sob investigação legal (ver item 3): dados podem ser retidos por tempo indeterminado, mediante justificativa legal.
+7. Dados Mantidos Administrativamente
+Mantemos, por obrigação legal e segurança:
+
+Logs de acesso (IP/Porta) por 6 meses (Marco Civil da Internet).
+Histórico de links de perfis, para evitar reaproveitamento indevido.
+Dados (e-mail/telefone) de usuários bloqueados, por tempo indeterminado, com a única finalidade de prevenir o retorno ao sistema.
+8. Considerações Técnicas
+O D4swing não tem controle sobre o que os usuários decidem compartilhar publicamente (como e-mail ou telefone em postagens).
+Ainda que adote medidas de segurança, não é tecnicamente possível impedir com 100% de eficácia que usuários com conhecimento técnico copiem imagens ou textos.
+10. Encarregado pelo Tratamento de Dados (DPO)
+Para exercer seus direitos ou tirar dúvidas sobre a política de privacidade, entre em contato diretamente com o suporte no e-mail: d4@d4swing.com
+
+Canal alternativo: https://d4swing.com/contacts

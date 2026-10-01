@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, SendHorizontal } from "lucide-react";
+import { ArrowLeft, Check, ImagePlus, Lock, SendHorizontal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/app-shell";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useVip } from "@/context/vip";
+import { useAlbumUrls } from "@/lib/album-storage";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/chat")({
@@ -23,6 +26,14 @@ type ChatMessage = {
   content?: string;
   body?: string;
   created_at: string;
+  attachments?: ChatAttachment[];
+};
+
+type ChatAttachment = {
+  id: string;
+  message_id: string;
+  storage_path: string;
+  created_at: string;
 };
 
 type ChatPartner = {
@@ -31,6 +42,53 @@ type ChatPartner = {
   avatar: string | null;
 };
 
+function PrivatePhotoOption({
+  path,
+  selected,
+  onSelect,
+}: {
+  path: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const [url] = useAlbumUrls([path]);
+
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onSelect}
+      className={`relative aspect-square overflow-hidden rounded-lg border text-left ${selected ? "border-primary ring-2 ring-primary/50" : "border-border"}`}
+    >
+      {url ? (
+        <img src={url} alt="Foto privada do álbum" className="h-full w-full object-cover" />
+      ) : (
+        <span className="grid h-full w-full place-items-center bg-surface-2 text-xs text-muted-foreground">Carregando...</span>
+      )}
+      {selected && (
+        <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-primary text-primary-foreground">
+          <Check className="h-4 w-4" />
+        </span>
+      )}
+    </button>
+  );
+}
+
+function PrivatePhotoMessage({ path }: { path: string }) {
+  const [url] = useAlbumUrls([path]);
+
+  return url ? (
+    <img src={url} alt="Foto privada compartilhada" className="mt-2 max-h-72 max-w-full rounded-xl object-cover" />
+  ) : (
+    <p className="mt-2 text-xs opacity-75">Foto privada indisponível.</p>
+  );
+}
+
+function messagePreview(message: ChatMessage, currentUserId: string) {
+  const sender = message.sender_id === currentUserId ? "Você: " : "";
+  return `${sender}${message.body?.trim() || message.content?.trim() || "Mensagem"}`;
+}
+
 function formatTime(isoString: string) {
   return new Date(isoString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -38,11 +96,48 @@ function formatTime(isoString: string) {
 function ChatPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [partners, setPartners] = useState<ChatPartner[]>([]);
+  const [conversationPreviews, setConversationPreviews] = useState<Record<string, string>>({});
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [selectedPrivatePhotos, setSelectedPrivatePhotos] = useState<string[]>([]);
+  const [privatePhotoPaths, setPrivatePhotoPaths] = useState<string[]>([]);
+  const [canSendPrivatePhotos, setCanSendPrivatePhotos] = useState(false);
+  const [privatePhotoPickerOpen, setPrivatePhotoPickerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const { openVipModal } = useVip();
+
+  const openPrivatePhotoPicker = async () => {
+    if (!currentUserId) return;
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("vip, private_album")
+      .eq("id", currentUserId)
+      .maybeSingle();
+
+    if (error || !profile) {
+      console.error("Erro ao carregar álbum privado para o chat:", error);
+      toast.error("Não foi possível carregar seu álbum privado");
+      return;
+    }
+
+    setCanSendPrivatePhotos(profile.vip);
+    if (!profile.vip) {
+      openVipModal();
+      return;
+    }
+
+    const photos = (profile.private_album ?? []).filter((path) => path.startsWith(`${currentUserId}/private/`));
+    setPrivatePhotoPaths(photos);
+    if (!photos.length) {
+      toast(profile.private_album?.length
+        ? "As fotos salvas não têm caminhos compatíveis com o álbum privado"
+        : "Seu álbum privado ainda não tem fotos");
+      return;
+    }
+    setPrivatePhotoPickerOpen(true);
+  };
 
   useEffect(() => {
     async function init() {
@@ -57,6 +152,36 @@ function ChatPage() {
       if (profiles && profiles.length > 0) {
         setPartners(profiles);
       }
+
+      const { data: conversations } = await supabase
+        .from("conversations")
+        .select("id, user_a, user_b")
+        .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+
+      if (!conversations?.length) return;
+
+      const partnerByConversation = new Map<string, string>();
+      for (const conversation of conversations) {
+        partnerByConversation.set(
+          conversation.id,
+          conversation.user_a === user.id ? conversation.user_b : conversation.user_a,
+        );
+      }
+
+      const { data: latestMessages } = await supabase
+        .from("messages")
+        .select("id, sender_id, conversation_id, body, created_at")
+        .in("conversation_id", [...partnerByConversation.keys()])
+        .order("created_at", { ascending: false });
+
+      const previews: Record<string, string> = {};
+      for (const message of latestMessages ?? []) {
+        const partnerId = partnerByConversation.get(message.conversation_id);
+        if (partnerId && previews[partnerId] === undefined) {
+          previews[partnerId] = messagePreview(message, user.id);
+        }
+      }
+      setConversationPreviews(previews);
     }
 
     void init();
@@ -92,7 +217,36 @@ function ChatPage() {
           .eq("conversation_id", conv.id)
           .order("created_at", { ascending: true });
 
-        setMessages(msgList || []);
+        const loadedMessages = (msgList ?? []) as ChatMessage[];
+        const messageIds = loadedMessages.map((message) => message.id);
+        let attachments: ChatAttachment[] = [];
+        if (messageIds.length) {
+          const { data: attachmentRows, error: attachmentError } = await supabase
+            .from("message_attachments")
+            .select("*")
+            .in("message_id", messageIds);
+          if (attachmentError) {
+            console.error("Erro ao carregar anexos da conversa:", attachmentError);
+            toast.error("Não foi possível carregar as fotos desta conversa");
+          }
+          attachments = (attachmentRows ?? []) as ChatAttachment[];
+        }
+        const attachmentsByMessage = new Map<string, ChatAttachment[]>();
+        for (const attachment of attachments) {
+          const current = attachmentsByMessage.get(attachment.message_id) ?? [];
+          attachmentsByMessage.set(attachment.message_id, [...current, attachment]);
+        }
+        setMessages(loadedMessages.map((message) => ({
+          ...message,
+          attachments: attachmentsByMessage.get(message.id) ?? [],
+        })));
+        const latestMessage = msgList?.at(-1) as ChatMessage | undefined;
+        if (latestMessage) {
+          setConversationPreviews((previews) => ({
+            ...previews,
+            [activePartnerId]: messagePreview(latestMessage, currentUserId),
+          }));
+        }
       }
     }
 
@@ -100,10 +254,10 @@ function ChatPage() {
   }, [currentUserId, activePartnerId]);
 
   const handleSendMessage = async () => {
-    if (!draft.trim() || !currentUserId || !activeConversationId) return;
+    if ((!draft.trim() && !selectedPrivatePhotos.length) || !currentUserId || !activeConversationId) return;
 
     const text = draft.trim();
-    setDraft("");
+    const photoPaths = [...selectedPrivatePhotos];
 
     const { data, error } = await supabase
       .from("messages")
@@ -111,26 +265,73 @@ function ChatPage() {
         {
           sender_id: currentUserId,
           conversation_id: activeConversationId,
-          body: text,
+          body: text || (photoPaths.length === 1 ? "Enviou uma foto privada" : "Enviou fotos privadas"),
         },
       ])
       .select()
       .single();
 
     if (error) {
+      console.error("Erro ao gravar mensagem no Supabase:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       toast.error("Erro ao enviar mensagem");
-    } else if (data) {
-      toast.success("Mensagem enviada");
-      setMessages((prev) => [...prev, data as ChatMessage]);
+      return;
+    }
 
-      if (activePartnerId && activePartnerId !== currentUserId) {
-        await supabase.from("notifications").insert({
-          user_id: activePartnerId,
-          actor_id: currentUserId,
-          type: "message",
-          body: "enviou uma mensagem",
+    if (!data) return;
+
+    let attachments: ChatAttachment[] = [];
+    if (photoPaths.length) {
+      const { data: attachmentRows, error: attachmentError } = await supabase
+        .from("message_attachments")
+        .insert(photoPaths.map((storagePath) => ({ message_id: data.id, storage_path: storagePath })))
+        .select("*");
+      if (attachmentError || (attachmentRows ?? []).length !== photoPaths.length) {
+        console.error("Erro ao gravar anexos privados no Supabase:", {
+          code: attachmentError?.code,
+          message: attachmentError?.message ?? "Quantidade de anexos gravados diferente da selecionada",
+          details: attachmentError?.details,
+          hint: attachmentError?.hint,
+          expected: photoPaths.length,
+          received: attachmentRows?.length ?? 0,
         });
+        setMessages((previous) => [...previous, { ...(data as ChatMessage), attachments: [] }]);
+        if (activePartnerId) {
+          setConversationPreviews((previews) => ({
+            ...previews,
+            [activePartnerId]: messagePreview(data as ChatMessage, currentUserId),
+          }));
+        }
+        toast.error("A mensagem foi criada, mas o Supabase não gravou as fotos. A seleção foi mantida.");
+        return;
       }
+      attachments = attachmentRows as ChatAttachment[];
+      toast.success("Mensagem e fotos enviadas");
+    } else {
+      toast.success("Mensagem enviada");
+    }
+
+    setMessages((previous) => [...previous, { ...(data as ChatMessage), attachments }]);
+    setDraft("");
+    setSelectedPrivatePhotos([]);
+    if (activePartnerId) {
+      setConversationPreviews((previews) => ({
+        ...previews,
+        [activePartnerId]: messagePreview(data as ChatMessage, currentUserId),
+      }));
+    }
+
+    if (activePartnerId && activePartnerId !== currentUserId) {
+      await supabase.from("notifications").insert({
+        user_id: activePartnerId,
+        actor_id: currentUserId,
+        type: "message",
+        body: "enviou uma mensagem",
+      });
     }
   };
 
@@ -139,6 +340,12 @@ function ChatPage() {
   const filteredPartners = partners.filter((p) =>
     p.nick.toLowerCase().includes(searchTerm.trim().toLowerCase()),
   );
+
+  useEffect(() => {
+    setSelectedPrivatePhotos([]);
+    setPrivatePhotoPaths([]);
+    setPrivatePhotoPickerOpen(false);
+  }, [activePartnerId]);
 
   return (
     <AppShell>
@@ -176,7 +383,8 @@ function ChatPage() {
                 ) : (
                   filteredPartners.map((p) => {
                     const isActive = p.id === activePartnerId;
-                    const preview = isActive ? activePreview : "Clique para abrir";
+                    const preview = conversationPreviews[p.id]
+                      ?? (isActive ? activePreview : "Nenhuma mensagem ainda");
 
                     return (
                       <button
@@ -292,6 +500,9 @@ function ChatPage() {
                               }`}
                             >
                               <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.body}</p>
+                              {msg.attachments?.map((attachment) => (
+                                <PrivatePhotoMessage key={attachment.id} path={attachment.storage_path} />
+                              ))}
                               <span className={`mt-1.5 block text-[10px] ${isMe ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
                                 {formatTime(msg.created_at)}
                               </span>
@@ -308,6 +519,15 @@ function ChatPage() {
 
                   <div className="border-t border-border/70 bg-surface/40 p-3 sm:p-4">
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void openPrivatePhotoPicker()}
+                        aria-label={canSendPrivatePhotos ? "Enviar fotos do álbum privado" : "Enviar fotos privadas, recurso VIP"}
+                        title={canSendPrivatePhotos ? "Enviar foto privada" : "Recurso VIP"}
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                      >
+                        {canSendPrivatePhotos ? <ImagePlus className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                      </button>
                       <input
                         type="text"
                         value={draft}
@@ -326,7 +546,7 @@ function ChatPage() {
                         onClick={() => void handleSendMessage()}
                         className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-neon transition-transform duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
                         aria-label="Enviar mensagem"
-                        disabled={!draft.trim()}
+                        disabled={!draft.trim() && !selectedPrivatePhotos.length}
                       >
                         <SendHorizontal className="h-4 w-4" />
                       </button>
@@ -342,6 +562,43 @@ function ChatPage() {
           </div>
         </div>
       </div>
+      <Dialog open={privatePhotoPickerOpen} onOpenChange={setPrivatePhotoPickerOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto border-border bg-surface sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Enviar fotos privadas</DialogTitle>
+            <DialogDescription>Selecione fotos do seu álbum privado para enviar nesta conversa.</DialogDescription>
+          </DialogHeader>
+          {privatePhotoPaths.length ? (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                {privatePhotoPaths.map((path) => {
+                  const selected = selectedPrivatePhotos.includes(path);
+                  return (
+                    <PrivatePhotoOption
+                      key={path}
+                      path={path}
+                      selected={selected}
+                      onSelect={() => setSelectedPrivatePhotos((photos) => (
+                        selected ? photos.filter((photo) => photo !== path) : [...photos, path]
+                      ))}
+                    />
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPrivatePhotoPickerOpen(false)}
+                disabled={!selectedPrivatePhotos.length}
+                className="w-full rounded-full bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+              >
+                Adicionar {selectedPrivatePhotos.length || ""} foto{selectedPrivatePhotos.length === 1 ? "" : "s"} à mensagem
+              </button>
+            </>
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">Seu álbum privado ainda não tem fotos.</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

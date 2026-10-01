@@ -27,6 +27,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AvatarOrb, MediaBlock, TypeBadge, VipBadge } from "@/components/bits";
+import { PostCard } from "@/routes/_authenticated/feed";
 import { openPostComposer } from "@/components/app-shell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -43,37 +44,9 @@ import { useVip, FREE_LIKE_LIMIT } from "@/context/vip";
 import { useSocial } from "@/hooks/use-social";
 import { useAuth } from "@/hooks/use-auth";
 import { useAlbumUrls } from "@/lib/album-storage";
+import { ReportDialog, type ReportTarget } from "@/components/report-dialog";
 
-function ProfilePostMedia({ post, profile, vip }: { post: Post; profile: Profile; vip: boolean }) {
-  const urls = useAlbumUrls(post.image ? [post.image] : [], `${post.author_id}/public`);
-
-  return (
-    <div className="relative">
-      <MediaBlock
-        hue={profile.hue + 18}
-        src={urls[0] ?? null}
-        alt={`Ilustração do post de ${profile.nick}`}
-        className="aspect-[4/3] w-full"
-      />
-      {post.media === "video" && (
-        <>
-          <button
-            aria-label="Reproduzir vídeo"
-            onClick={() => toast("Reproduzindo vídeo")}
-            className="absolute inset-0 grid place-items-center"
-          >
-            <span className="grid h-12 w-12 place-items-center rounded-full bg-background/70 backdrop-blur">
-              <Play className="h-5 w-5 fill-current" />
-            </span>
-          </button>
-          {vip && <VipBadge className="absolute right-2 top-2 opacity-90" />}
-        </>
-      )}
-    </div>
-  );
-}
-import type { Post, PostComment, Profile } from "@/context/profiles-context";
-
+import type { PostComment, Profile } from "@/context/profiles-context";
 
 function nf(n: number) {
   if (n >= 1000) return `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1).replace(".", ",")} mil`;
@@ -124,50 +97,6 @@ function memberSince(createdAt: string | null) {
   return `Desde ${date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`;
 }
 
-function LikeAndCommentsRow({
-  likes,
-  comments,
-  liked,
-  onLike,
-  onOpenLikes,
-  onOpenComments,
-}: {
-  likes: number;
-  comments: number;
-  liked: boolean;
-  onLike: () => void;
-  onOpenLikes: () => void;
-  onOpenComments: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground">
-      <button
-        type="button"
-        onClick={onLike}
-        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2 py-1 hover:text-foreground"
-      >
-        <Heart className={`h-3.5 w-3.5 ${liked ? "fill-primary-glow text-primary-glow" : ""}`} />
-        <span>{likes}</span>
-      </button>
-      <button
-        type="button"
-        onClick={onOpenLikes}
-        className="text-[11px] font-medium text-primary-glow hover:underline"
-      >
-        Ver curtidas
-      </button>
-      <button
-        type="button"
-        onClick={onOpenComments}
-        className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2 py-1 hover:text-foreground"
-      >
-        <MessageSquare className="h-3.5 w-3.5" />
-        <span>{comments}</span>
-      </button>
-    </div>
-  );
-}
-
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
   const navigate = useNavigate();
   const {
@@ -182,28 +111,20 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     isPostLiked,
     addComment,
     getPostComments,
-    updatePost,
-    deletePost,
   } = useProfiles();
   const { isVip, openVipModal, tryUseLike, likesUsedToday } = useVip();
   const social = useSocial();
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
-  const [lightbox, setLightbox] = useState<{ index: number } | null>(null);
+  const [lightbox, setLightbox] = useState<{ album: "public" | "private"; index: number } | null>(null);
   const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
-  const [galleryLikes, setGalleryLikes] = useState<Record<number, number>>({});
-  const [galleryLiked, setGalleryLiked] = useState<Record<number, boolean>>({});
-  const [galleryComments, setGalleryComments] = useState<Record<number, number>>({});
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [likesModalOpen, setLikesModalOpen] = useState(false);
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
   const [selectedPostComments, setSelectedPostComments] = useState<PostComment[]>([]);
   const [selectedAlbumPhoto, setSelectedAlbumPhoto] = useState<{ profileId: string; photoPath: string } | null>(null);
   const [loadingPostComments, setLoadingPostComments] = useState(false);
-  const [editPost, setEditPost] = useState<Post | null>(null);
-  const [editedPostText, setEditedPostText] = useState("");
   const [wallPostOpen, setWallPostOpen] = useState(false);
   const [wallPostText, setWallPostText] = useState("");
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const { current } = useProfiles();
   const activeProfile = profile ?? current;
   const publicPosts = useMemo(
@@ -221,19 +142,6 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
   );
   const publicUrls = useAlbumUrls(publicPhotoPaths, `${profile.id}/public`);
   const privateUrls = useAlbumUrls(activeProfile?.private_album ?? []);
-
-  useEffect(() => {
-    if (!lightbox || !activeProfile) return;
-    const index = lightbox.index;
-    const photoPath = publicPosts[index]?.image;
-    if (!photoPath) return;
-    const photoPost = publicPosts[index];
-    if (photoPost) {
-      setGalleryLikes((current) => ({ ...current, [index]: photoPost.likes }));
-      setGalleryLiked((current) => ({ ...current, [index]: isPostLiked(photoPost.id) }));
-      setGalleryComments((current) => ({ ...current, [index]: photoPost.comments }));
-    }
-  }, [activeProfile, isPostLiked, lightbox, publicPosts]);
 
    useEffect(() => {
     if (!isOwner && user && profile.id !== user.id) void social.registerVisit(profile.id);
@@ -279,13 +187,29 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     const ids = connectionsView === "followers" ? followersIds : followingIds;
     return ids.map((id) => profiles.find((p) => p.id === id)).filter((p): p is Profile => !!p);
   }, [connectionsView, followersIds, followingIds, profiles]);
-  const publicPhotoTouchStart = useRef<number | null>(null);
+  const photoTouchStart = useRef<number | null>(null);
   const privateCount = canViewPrivateAlbum ? privateUrls.length : (profile.private_album ?? []).length;
   const privatePhotos = useMemo(
     () => Array.from({ length: privateCount }, (_, i) => profile.hue + i * 21),
     [privateCount, profile.hue],
   );
   const likesLeft = Math.max(0, FREE_LIKE_LIMIT - likesUsedToday);
+  const lightboxPost = lightbox?.album === "public" ? publicPosts[lightbox.index] : undefined;
+  const lightboxPhotoCount = lightbox?.album === "private" ? privatePhotos.length : publicPosts.length;
+  const lightboxPhotoExists = lightbox !== null && (
+    lightbox.album === "public"
+      ? Boolean(lightboxPost)
+      : canViewPrivateAlbum && privatePhotos[lightbox.index] !== undefined
+  );
+
+  const moveLightbox = (direction: 1 | -1) => {
+    setLightbox((current) => {
+      if (!current) return null;
+      const count = current.album === "public" ? publicPosts.length : privatePhotos.length;
+      if (count < 2) return current;
+      return { ...current, index: (current.index + direction + count) % count };
+    });
+  };
 
   const bio = profile.bio ?? "";
   const bioShort = bio.slice(0, 120);
@@ -301,19 +225,23 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-muted text-muted-foreground">
             <Ban className="h-5 w-5" />
           </div>
-          <h2 className="mt-4 text-xl font-semibold">Perfil bloqueado</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <h2 className="mt-4 text-xl font-semibold text-destructive">Perfil bloqueado</h2>
+          <p className="mt-2 text-sm text-destructive/70">
             Você bloqueou {profile.nick}. Esse perfil vai ficar oculto até você desbloquear.
           </p>
           <div className="mt-5 flex justify-center gap-3">
             <button
               type="button"
-              onClick={() => {
-                unblockProfile(profile.id);
+              onClick={async () => {
+                const unblocked = await unblockProfile(profile.id);
+                if (!unblocked) {
+                  toast.error("Não foi possível desbloquear este perfil");
+                  return;
+                }
                 toast.success(`${profile.nick} desbloqueado`);
                 navigate({ to: "/explorar" });
               }}
-              className="rounded-full bg-gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              className="rounded-full border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm font-semibold text-destructive hover:bg-destructive/10"
             >
               Desbloquear
             </button>
@@ -328,14 +256,6 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         </div>
       </div>
     );
-  }
-
-  async function openPostComments(postId: string) {
-    setSelectedAlbumPhoto(null);
-    setCommentsModalOpen(true);
-    setLoadingPostComments(true);
-    setSelectedPostComments(await getPostComments(postId));
-    setLoadingPostComments(false);
   }
 
   async function openAlbumComments(index: number) {
@@ -417,10 +337,24 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             >
               <PenSquare className="mr-2 h-4 w-4" /> Postar no mural
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { blockProfile(profile.id); toast.success(`${profile.nick} bloqueado`); navigate({ to: "/explorar" }); }}>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={async () => {
+                const blocked = await blockProfile(profile.id);
+                if (!blocked) {
+                  toast.error("Não foi possível bloquear este perfil");
+                  return;
+                }
+                toast.success(`${profile.nick} bloqueado`);
+                navigate({ to: "/explorar" });
+              }}
+            >
               <Ban className="mr-2 h-4 w-4" /> Bloquear
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => toast.success("Denúncia enviada para moderação")}>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => setReportTarget({ reportedProfileId: profile.id })}
+            >
               <Flag className="mr-2 h-4 w-4" /> Denunciar
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -628,139 +562,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma publicação ainda.</p>
               )}
               {timeline.map((post) => (
-                <article key={post.id} className="overflow-hidden rounded-2xl border border-border bg-surface">
-                  <div className="relative flex items-center gap-2 p-3">
-                    <AvatarOrb
-                      profile={
-                        post.profiles ?? {
-                          id: profile.id,
-                          nick: profile.nick,
-                          hue: profile.hue,
-                          vip,
-                          avatar: profile.avatar ?? null,
-                        }
-                      }
-                      size={34}
-                      profileId={post.profiles?.id ?? profile.id}
-                      clickable
-                    />
-                    <div>
-                      <Link
-                        to="/perfil/$id"
-                        params={{ id: post.profiles?.id ?? profile.id }}
-                        className="text-sm font-medium hover:underline"
-                        aria-label={`Ver perfil de ${post.profiles?.nick ?? profile.nick}`}
-                      >
-                        {post.profiles?.nick ?? profile.nick}
-                      </Link>
-                      <p className="text-[11px] text-muted-foreground">
-                        {new Date(post.created_at).toLocaleDateString("pt-BR")}
-                      </p>
-                    </div>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                          type="button"
-                          aria-label={`Mais opções da publicação de ${post.profiles?.nick ?? profile.nick}`}
-                          className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded-full text-muted-foreground hover:bg-surface-2 hover:text-foreground"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56 border-border bg-surface">
-                          <DropdownMenuItem onClick={() => navigate({ to: "/perfil/$id", params: { id: post.author_id } })}>
-                            <UserRound className="mr-2 h-4 w-4" /> Visitar perfil
-                          </DropdownMenuItem>
-                          {currentId === post.author_id ? (
-                            <>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setEditedPostText(post.text);
-                                  setEditPost(post);
-                                }}
-                              >
-                                <PenSquare className="mr-2 h-4 w-4" /> Editar publicação
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={async () => {
-                                  const removed = await deletePost(post.id);
-                                  if (removed) toast.success("Publicação removida");
-                                  else toast.error("Não foi possível remover a publicação");
-                                }}
-                              >
-                                <X className="mr-2 h-4 w-4" /> Remover publicação
-                              </DropdownMenuItem>
-                            </>
-                          ) : (
-                            <DropdownMenuItem onClick={() => toast.success("Publicação denunciada") }>
-                              <Flag className="mr-2 h-4 w-4" /> Denunciar publicação
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <p className="px-3 pb-3 text-sm text-foreground/90">{post.text}</p>
-                  {post.image && <ProfilePostMedia post={post} profile={profile} vip={vip} />}
-                  {post.image && post.media === "video" && (
-                      <>
-                        <button
-                          aria-label="Reproduzir vídeo"
-                          onClick={() => toast("Reproduzindo vídeo")}
-                          className="absolute inset-0 grid place-items-center"
-                        >
-                          <span className="grid h-12 w-12 place-items-center rounded-full bg-background/70 backdrop-blur">
-                            <Play className="h-5 w-5 fill-current" />
-                          </span>
-                        </button>
-                        {vip && <VipBadge className="absolute right-2 top-2 opacity-90" />}
-                      </>
-                  )}
-                  <div className="flex items-center gap-3 px-3 py-2 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <Heart className="h-3.5 w-3.5" /> {post.likes}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setLikesModalOpen(true)}
-                      className="text-[11px] font-medium text-primary-glow hover:underline"
-                    >
-                      Ver curtidas
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void openPostComments(post.id)}
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2 py-1 hover:text-foreground"
-                    >
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      <span>{post.comments}</span>
-                    </button>
-                  </div>
-                  <form
-                    className="flex gap-2 px-3 pb-3"
-                    onSubmit={async (event) => {
-                      event.preventDefault();
-                      const text = commentDrafts[post.id]?.trim() ?? "";
-                      if (!text) return;
-                      await addComment(post.id, text);
-                      setCommentDrafts((drafts) => ({ ...drafts, [post.id]: "" }));
-                    }}
-                  >
-                    <input
-                      value={commentDrafts[post.id] ?? ""}
-                      onChange={(event) => setCommentDrafts((drafts) => ({ ...drafts, [post.id]: event.target.value }))}
-                      placeholder="Escreva um comentário..."
-                      className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                      aria-label={`Comentar na publicação de ${profile.nick}`}
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                      disabled={!commentDrafts[post.id]?.trim()}
-                    >
-                      Comentar
-                    </button>
-                  </form>
-                </article>
+                <PostCard key={post.id} post={post} authorProfile={profile} />
               ))}
             </div>
           </TabsContent>
@@ -787,7 +589,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                     <div key={i} className="group relative overflow-hidden rounded-xl">
                       <button
                         type="button"
-                        onClick={() => setLightbox({ index: i })}
+                        onClick={() => setLightbox({ album: "public", index: i })}
                         aria-label={`Abrir foto ${i + 1}`}
                         className="block w-full overflow-hidden rounded-xl"
                       >
@@ -802,13 +604,20 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                           <MoreHorizontal className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-52 border-border bg-surface">
-                          <DropdownMenuItem onClick={() => setLightbox({ index: i })}>
+                          <DropdownMenuItem onClick={() => setLightbox({ album: "public", index: i })}>
                             <Eye className="mr-2 h-4 w-4" /> Ver publicação
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => navigate({ to: "/perfil/$id", params: { id: profile.id } })}>
                             <UserRound className="mr-2 h-4 w-4" /> Visitar perfil
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => toast.success("Foto denunciada")}>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => setReportTarget({
+                              reportedProfileId: profile.id,
+                              ...(publicPosts[i] ? { postId: publicPosts[i].id } : {}),
+                              details: `Foto ${i + 1} do álbum público`,
+                            })}
+                          >
                             <Flag className="mr-2 h-4 w-4" /> Denunciar foto
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -834,17 +643,25 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   {privatePhotos.map((h, i) => (
                     <div key={i} className="relative aspect-square overflow-hidden rounded-xl">
-                      <MediaBlock
-                        hue={h}
-                        src={canViewPrivateAlbum ? (privateUrls[i] ?? null) : null}
-                        alt={canViewPrivateAlbum ? `Foto privada de ${profile.nick}` : "Foto privada bloqueada"}
-                        className={`h-full w-full ${canViewPrivateAlbum ? "" : "blur-lg"}`}
-                      />
-                      {!canViewPrivateAlbum && (
-                        <div className="absolute inset-0 grid place-items-center bg-background/40">
+                      <button
+                        type="button"
+                        disabled={!canViewPrivateAlbum}
+                        onClick={() => setLightbox({ album: "private", index: i })}
+                        aria-label={`Abrir foto privada ${i + 1}`}
+                        className="relative block h-full w-full disabled:cursor-default"
+                      >
+                        <MediaBlock
+                          hue={h}
+                          src={canViewPrivateAlbum ? (privateUrls[i] ?? null) : null}
+                          alt={canViewPrivateAlbum ? `Foto privada de ${profile.nick}` : "Foto privada bloqueada"}
+                          className={`h-full w-full ${canViewPrivateAlbum ? "" : "blur-lg"}`}
+                        />
+                        {!canViewPrivateAlbum && (
+                          <span className="absolute inset-0 grid place-items-center bg-background/40">
                           <Lock className="h-5 w-5 text-gold" />
-                        </div>
-                      )}
+                          </span>
+                        )}
+                      </button>
                     </div>
                   ))}
                   {privatePhotos.length === 0 && (
@@ -886,7 +703,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
 
       <Dialog open={lightbox !== null} onOpenChange={(o) => !o && setLightbox(null)}>
         <DialogContent className="!left-0 !top-0 !translate-x-0 !translate-y-0 inset-0 flex h-[100dvh] w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-black p-0 text-white [&>button:last-child]:hidden">
-          {lightbox !== null && publicPosts[lightbox.index] && (
+          {lightboxPhotoExists && lightbox !== null && (
             <>
               <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-black/90 px-4">
                 <button
@@ -898,7 +715,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                   <X className="h-5 w-5" />
                 </button>
                 <AvatarOrb profile={profile} size={36} profileId={profile.id} clickable />
-                <DropdownMenu>
+                {lightbox.album === "public" ? <DropdownMenu>
                   <DropdownMenuTrigger
                     aria-label={`Mais opções da publicação de ${profile.nick}`}
                     className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
@@ -909,41 +726,67 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                     <DropdownMenuItem onClick={() => navigate({ to: "/perfil/$id", params: { id: profile.id } })}>
                       <UserRound className="mr-2 h-4 w-4" /> Visitar perfil
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => toast.success("Publicação denunciada")}>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => {
+                        const post = publicPosts[lightbox.index];
+                        setReportTarget({
+                          reportedProfileId: profile.id,
+                          ...(post ? { postId: post.id } : {}),
+                          details: `Foto ${lightbox.index + 1} do álbum público`,
+                        });
+                      }}
+                    >
                       <Flag className="mr-2 h-4 w-4" /> Denunciar publicação
                     </DropdownMenuItem>
                   </DropdownMenuContent>
-                </DropdownMenu>
+                </DropdownMenu> : <span className="h-10 w-10" />}
               </header>
 
               <div
                 className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-3 sm:p-6"
                 onTouchStart={(event) => {
-                  publicPhotoTouchStart.current = event.touches[0]?.clientX ?? null;
+                  photoTouchStart.current = event.touches[0]?.clientX ?? null;
                 }}
                 onTouchEnd={(event) => {
-                  const start = publicPhotoTouchStart.current;
+                  const start = photoTouchStart.current;
                   const end = event.changedTouches[0]?.clientX;
-                  publicPhotoTouchStart.current = null;
+                  photoTouchStart.current = null;
                   if (start === null || end === undefined || Math.abs(end - start) < 48) return;
-                  setLightbox((current) => {
-                    if (!current) return null;
-                    const direction = end < start ? 1 : -1;
-                    return { index: (current.index + direction + publicPosts.length) % publicPosts.length };
-                  });
+                  moveLightbox(end < start ? 1 : -1);
                 }}
               >
                 <div className="relative flex max-h-full max-w-full items-center justify-center">
-                <MediaBlock
-                  hue={profile.hue + lightbox.index * 14}
-                  src={publicUrls[lightbox.index] ?? null}
-                  alt={`Foto ${lightbox.index + 1} de ${profile.nick}`}
-                  className="h-[min(70vw,calc(100dvh-9rem))] w-[min(70vw,calc(100dvh-9rem))] max-w-full rounded-lg sm:rounded-xl"
-                />
+                  <MediaBlock
+                    hue={profile.hue + lightbox.index * (lightbox.album === "private" ? 21 : 14)}
+                    src={lightbox.album === "private" ? (privateUrls[lightbox.index] ?? null) : (publicUrls[lightbox.index] ?? null)}
+                    alt={`${lightbox.album === "private" ? "Foto privada" : "Foto"} ${lightbox.index + 1} de ${profile.nick}`}
+                    className="h-[min(70vw,calc(100dvh-9rem))] w-[min(70vw,calc(100dvh-9rem))] max-w-full rounded-lg sm:rounded-xl"
+                  />
+                  {lightboxPhotoCount > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => moveLightbox(-1)}
+                        aria-label="Foto anterior"
+                        className="absolute left-2 grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white hover:bg-black/80 sm:left-4"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveLightbox(1)}
+                        aria-label="Próxima foto"
+                        className="absolute right-2 grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white hover:bg-black/80 sm:right-4"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <div className="flex shrink-0 items-center gap-5 border-t border-white/10 bg-black/90 px-5 py-4">
+              {lightbox.album === "public" ? <div className="flex shrink-0 items-center gap-5 border-t border-white/10 bg-black/90 px-5 py-4">
                 <button
                   type="button"
                   onClick={() => {
@@ -953,7 +796,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                   className="inline-flex items-center gap-2 text-sm text-white transition-colors hover:text-primary-glow"
                   aria-label={`Curtir publicação de ${profile.nick}`}
                 >
-                  <Heart className={`h-5 w-5 ${galleryLiked[lightbox.index] ? "fill-primary-glow text-primary-glow" : ""}`} />
+                  <Heart className={`h-5 w-5 ${lightboxPost && isPostLiked(lightboxPost.id) ? "fill-primary-glow text-primary-glow" : ""}`} />
                   <span>{publicPosts[lightbox.index]?.likes ?? 0}</span>
                 </button>
                 <button
@@ -965,25 +808,11 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                   <MessageSquare className="h-5 w-5" />
                   <span>{publicPosts[lightbox.index]?.comments ?? 0}</span>
                 </button>
-              </div>
+              </div> : <div className="shrink-0 border-t border-white/10 bg-black/90 px-5 py-4 text-center text-sm text-white">
+                Foto {lightbox.index + 1} de {privatePhotos.length}
+              </div>}
             </>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={likesModalOpen} onOpenChange={setLikesModalOpen}>
-        <DialogContent className="max-w-sm border-border bg-surface">
-          <DialogHeader>
-            <DialogTitle>Pessoas que curtiram</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 py-2 text-sm text-muted-foreground">
-            {profiles.slice(0, 5).map((person) => (
-              <div key={person.id} className="flex items-center gap-3 rounded-lg border border-border bg-surface-2 px-2 py-2">
-                <AvatarOrb profile={person} size={28} />
-                <span className="font-medium text-foreground">{person.nick}</span>
-              </div>
-            ))}
-          </div>
         </DialogContent>
       </Dialog>
 
@@ -1020,7 +849,13 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                           <Heart className="mr-2 h-4 w-4" /> Ver curtidas
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => toast.success("Comentário denunciado") }>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setReportTarget({
+                            reportedProfileId: comment.profile?.id ?? profile.id,
+                            details: `Comentário: ${comment.body}`,
+                          })}
+                        >
                           <Flag className="mr-2 h-4 w-4" /> Denunciar comentário
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -1056,42 +891,6 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(editPost)} onOpenChange={(open) => !open && setEditPost(null)}>
-        <DialogContent className="border-border bg-surface">
-          <DialogHeader>
-            <DialogTitle>Editar publicação</DialogTitle>
-            <DialogDescription>Atualize o texto da sua publicação.</DialogDescription>
-          </DialogHeader>
-          <Textarea value={editedPostText} onChange={(event) => setEditedPostText(event.target.value)} rows={4} />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setEditPost(null)}
-              className="rounded-full border border-border px-4 py-2 text-xs text-muted-foreground"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              disabled={!editedPostText.trim() || !editPost}
-              onClick={async () => {
-                if (!editPost) return;
-                const updated = await updatePost(editPost.id, editedPostText);
-                if (!updated) {
-                  toast.error("Não foi possível editar a publicação");
-                  return;
-                }
-                setEditPost(null);
-                toast.success("Publicação atualizada");
-              }}
-              className="rounded-full bg-gradient-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-            >
-              Salvar
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={wallPostOpen} onOpenChange={setWallPostOpen}>
         <DialogContent className="border-border bg-surface">
           <DialogHeader>
@@ -1122,6 +921,11 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
           </div>
         </DialogContent>
       </Dialog>
+      <ReportDialog
+        open={Boolean(reportTarget)}
+        onOpenChange={(open) => !open && setReportTarget(null)}
+        target={reportTarget}
+      />
     </>
   );
 }
