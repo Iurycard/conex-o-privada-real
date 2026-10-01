@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   Cake,
   CalendarDays,
-  Circle,
   Crown,
   Flag,
   Heart,
@@ -14,8 +13,6 @@ import {
   MoreHorizontal,
   MoreVertical,
   PenSquare,
-  Play,
-  Search,
   Signpost,
   UserRound,
   Ban,
@@ -106,7 +103,6 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     isBlocked,
     unblockProfile,
     createPost,
-    currentId,
     likePost,
     isPostLiked,
     addComment,
@@ -140,8 +136,10 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     () => publicPosts.map((post) => post.image).filter((image): image is string => Boolean(image)),
     [publicPosts],
   );
+  const access = social.albumAccess(profile.id);
+  const canViewPrivateAlbum = isOwner || (isVip && access === "approved");
   const publicUrls = useAlbumUrls(publicPhotoPaths, `${profile.id}/public`);
-  const privateUrls = useAlbumUrls(activeProfile?.private_album ?? []);
+  const privateUrls = useAlbumUrls(canViewPrivateAlbum ? activeProfile?.private_album ?? [] : []);
 
    useEffect(() => {
     if (!isOwner && user && profile.id !== user.id) void social.registerVisit(profile.id);
@@ -152,8 +150,6 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
    const blocked = targetProfileId ? isBlocked(targetProfileId) : false;
 
   const vip = isOwner ? isVip || profile.vip : profile.vip;
-  const access = social.albumAccess(profile.id);
-  const canViewPrivateAlbum = isOwner || access === "approved";
   const following = social.isFollowing(profile.id);
  
  
@@ -179,7 +175,8 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
 
   const timeline = useMemo(
     () => posts.filter((p) =>
-      p.wall_profile_id === profile.id || (p.wall_profile_id === null && p.author_id === profile.id),
+      (p.media === null || p.media === "foto") &&
+      (p.wall_profile_id === profile.id || (p.wall_profile_id === null && p.author_id === profile.id)),
     ),
     [posts, profile.id],
   );
@@ -296,9 +293,9 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
 
         {!isOwner && (
           <button
-            onClick={() => {
+            onClick={async () => {
               if (!following && !tryUseLike()) return;
-              void social.toggleFollow(profile.id, profile.nick);
+              await social.toggleFollow(profile.id, profile.nick);
               toast.success(following ? "Você deixou de seguir" : `Agora você segue ${profile.nick}`);
             }}
 
@@ -585,7 +582,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                   </button>
                 )}
                 <div className="mt-3 grid grid-cols-3 gap-2 pb-6">
-                  {publicPosts.map((post, i) => (
+                  {publicPosts.map((_, i) => (
                     <div key={i} className="group relative overflow-hidden rounded-xl">
                       <button
                         type="button"
@@ -671,12 +668,16 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 {!isOwner && (
                   <button
                     onClick={() => {
+                      if (!isVip) {
+                        openVipModal();
+                        return;
+                      }
                       if (access === "none" || access === "rejected") {
                         void social.requestAlbumAccess(profile.id, profile.nick);
                         toast.success("Solicitação enviada ao dono do álbum");
                       }
                     }}
-                    disabled={access === "pending" || access === "approved"}
+                    disabled={access === "pending" || (access === "approved" && isVip)}
                     className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-gold/45 bg-gold/5 py-3 text-sm font-medium text-gold hover:bg-gold/10 disabled:cursor-default disabled:opacity-70"
                   >
                     <Lock className="h-4 w-4" />
@@ -684,15 +685,9 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                       ? "Acesso liberado"
                       : access === "pending"
                         ? "Aguardando autorização do dono"
-                        : "Solicitar Acesso ao Álbum Privado"}
-                  </button>
-                )}
-                {!isVip && !isOwner && (
-                  <button
-                    onClick={openVipModal}
-                    className="mt-2 mb-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-gold py-3 text-sm font-semibold text-gold-foreground shadow-gold"
-                  >
-                    <Crown className="h-4 w-4" /> Ver com VIP
+                        : isVip
+                          ? "Solicitar Acesso ao Álbum Privado"
+                          : "Seja VIP para solicitar acesso"}
                   </button>
                 )}
               </TabsContent>
@@ -702,14 +697,14 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
       </div>
 
       <Dialog open={lightbox !== null} onOpenChange={(o) => !o && setLightbox(null)}>
-        <DialogContent className="!left-0 !top-0 !translate-x-0 !translate-y-0 inset-0 flex h-[100dvh] w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-black p-0 text-white [&>button:last-child]:hidden">
+        <DialogContent className="!fixed !inset-0 !left-0 !top-0 !translate-x-0 !translate-y-0 flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 bg-black p-0 text-white [&>button:last-child]:hidden">
           {lightboxPhotoExists && lightbox !== null && (
             <>
-              <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-black/90 px-4">
+              <header className="absolute inset-x-0 top-0 z-20 flex shrink-0 items-center justify-between bg-gradient-to-b from-black/60 to-transparent px-4 pb-3 pt-[calc(env(safe-area-inset-top)+1rem)]">
                 <button
                   type="button"
                   onClick={() => setLightbox(null)}
-                  className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                  className="grid h-10 w-10 place-items-center rounded-full bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/55"
                   aria-label="Fechar publicação"
                 >
                   <X className="h-5 w-5" />
@@ -718,7 +713,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 {lightbox.album === "public" ? <DropdownMenu>
                   <DropdownMenuTrigger
                     aria-label={`Mais opções da publicação de ${profile.nick}`}
-                    className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                    className="grid h-10 w-10 place-items-center rounded-full bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/55"
                   >
                     <MoreHorizontal className="h-5 w-5" />
                   </DropdownMenuTrigger>
@@ -744,7 +739,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
               </header>
 
               <div
-                className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-3 sm:p-6"
+                className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black"
                 onTouchStart={(event) => {
                   photoTouchStart.current = event.touches[0]?.clientX ?? null;
                 }}
@@ -756,13 +751,19 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                   moveLightbox(end < start ? 1 : -1);
                 }}
               >
-                <div className="relative flex max-h-full max-w-full items-center justify-center">
-                  <MediaBlock
-                    hue={profile.hue + lightbox.index * (lightbox.album === "private" ? 21 : 14)}
-                    src={lightbox.album === "private" ? (privateUrls[lightbox.index] ?? null) : (publicUrls[lightbox.index] ?? null)}
-                    alt={`${lightbox.album === "private" ? "Foto privada" : "Foto"} ${lightbox.index + 1} de ${profile.nick}`}
-                    className="h-[min(70vw,calc(100dvh-9rem))] w-[min(70vw,calc(100dvh-9rem))] max-w-full rounded-lg sm:rounded-xl"
-                  />
+                <div className="relative flex h-full w-full items-center justify-center">
+                  {(lightbox.album === "private" ? privateUrls[lightbox.index] : publicUrls[lightbox.index]) ? (
+                    <img
+                      src={(lightbox.album === "private" ? privateUrls[lightbox.index] : publicUrls[lightbox.index]) ?? undefined}
+                      alt={`${lightbox.album === "private" ? "Foto privada" : "Foto"} ${lightbox.index + 1} de ${profile.nick}`}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <MediaBlock
+                      hue={profile.hue + lightbox.index * (lightbox.album === "private" ? 21 : 14)}
+                      className="h-full w-full"
+                    />
+                  )}
                   {lightboxPhotoCount > 1 && (
                     <>
                       <button
@@ -786,7 +787,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 </div>
               </div>
 
-              {lightbox.album === "public" ? <div className="flex shrink-0 items-center gap-5 border-t border-white/10 bg-black/90 px-5 py-4">
+              {lightbox.album === "public" ? <div className="absolute inset-x-0 bottom-0 z-20 flex items-center gap-5 bg-gradient-to-t from-black/60 to-transparent px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-10">
                 <button
                   type="button"
                   onClick={() => {
@@ -808,7 +809,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                   <MessageSquare className="h-5 w-5" />
                   <span>{publicPosts[lightbox.index]?.comments ?? 0}</span>
                 </button>
-              </div> : <div className="shrink-0 border-t border-white/10 bg-black/90 px-5 py-4 text-center text-sm text-white">
+              </div> : <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/60 to-transparent px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-10 text-center text-sm text-white">
                 Foto {lightbox.index + 1} de {privatePhotos.length}
               </div>}
             </>

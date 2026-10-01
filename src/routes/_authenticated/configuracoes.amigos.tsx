@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Heart, UserRound } from "lucide-react";
-import { useState } from "react";
 import { AvatarOrb, PageHeader, VipBadge } from "@/components/bits";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProfiles } from "@/context/profiles-context";
+import { useSocial } from "@/hooks/use-social";
+import { useVip } from "@/context/vip";
 
 export const Route = createFileRoute("/_authenticated/configuracoes/amigos")({
   head: () => ({
@@ -28,7 +29,7 @@ function ProfileList({
 }: {
   profiles: ReturnType<typeof useProfiles>["profiles"];
   following: (id: string) => boolean;
-  onToggleFollow: (id: string) => void;
+  onToggleFollow: (id: string, nick: string) => void;
 }) {
   if (profiles.length === 0) {
     return <p className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">Nenhum perfil nesta lista ainda.</p>;
@@ -61,7 +62,7 @@ function ProfileList({
             type="button"
             aria-label={following(profile.id) ? `Deixar de seguir ${profile.nick}` : `Seguir ${profile.nick}`}
             title={following(profile.id) ? "Deixar de seguir" : "Seguir"}
-            onClick={() => onToggleFollow(profile.id)}
+            onClick={() => onToggleFollow(profile.id, profile.nick)}
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary-glow transition-colors hover:bg-surface-2"
           >
             <Heart className={`h-5 w-5 ${following(profile.id) ? "fill-current" : ""}`} />
@@ -73,17 +74,17 @@ function ProfileList({
 }
 
 function ConnectionsPage() {
-  const { profiles, currentId, isFollowing, toggleFollow } = useProfiles();
-  const [unfollowedIds, setUnfollowedIds] = useState<string[]>([]);
-  const mockConnections = profiles.filter((profile) => profile.id !== currentId);
-  const followers = mockConnections.slice(0, 5);
-  const following = mockConnections.slice(2, 7).filter((profile) => !unfollowedIds.includes(profile.id));
-
-  const handleToggleFollow = (id: string, isFollowingList: boolean) => {
-    toggleFollow(id);
-    if (isFollowingList && isFollowing(id)) {
-      setUnfollowedIds((ids) => [...ids, id]);
-    }
+  const { profiles, currentId } = useProfiles();
+  const social = useSocial();
+  const { tryUseLike } = useVip();
+  const toProfiles = (ids: string[]) => ids
+    .map((id) => profiles.find((profile) => profile.id === id))
+    .filter((profile): profile is (typeof profiles)[number] => Boolean(profile));
+  const followers = currentId ? toProfiles(social.followersOf(currentId)) : [];
+  const following = currentId ? toProfiles(social.followingOf(currentId)) : [];
+  const handleToggleFollow = async (id: string, nick: string) => {
+    if (!social.isFollowing(id) && !tryUseLike()) return;
+    await social.toggleFollow(id, nick);
   };
 
   return (
@@ -102,10 +103,26 @@ function ConnectionsPage() {
           <TabsTrigger value="seguindo">Seguindo</TabsTrigger>
         </TabsList>
         <TabsContent value="seguidores" className="mt-4">
-          <ProfileList profiles={followers} following={isFollowing} onToggleFollow={(id) => handleToggleFollow(id, false)} />
+          {social.ready ? (
+            <ProfileList
+              profiles={followers}
+              following={social.isFollowing}
+              onToggleFollow={(id, nick) => void handleToggleFollow(id, nick)}
+            />
+          ) : (
+            <p className="py-12 text-center text-sm text-muted-foreground">Carregando conexões…</p>
+          )}
         </TabsContent>
         <TabsContent value="seguindo" className="mt-4">
-          <ProfileList profiles={following} following={() => true} onToggleFollow={(id) => handleToggleFollow(id, true)} />
+          {social.ready ? (
+            <ProfileList
+              profiles={following}
+              following={() => true}
+              onToggleFollow={(id, nick) => void handleToggleFollow(id, nick)}
+            />
+          ) : (
+            <p className="py-12 text-center text-sm text-muted-foreground">Carregando conexões…</p>
+          )}
         </TabsContent>
       </Tabs>
     </div>

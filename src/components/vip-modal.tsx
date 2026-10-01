@@ -9,7 +9,7 @@ const benefits = [
   "Preferência nas pesquisas — assinantes aparecem antes dos usuários free",
   "Veja todos que visitaram o seu perfil",
   "Curta perfis de forma ilimitada",
-  "Vídeos liberados no feed e no chat",
+  "Acesse álbuns privados quando o dono autorizar",
   "Zero anúncios em toda a plataforma",
   "Destaque dourado no feed e no Explorar",
 ];

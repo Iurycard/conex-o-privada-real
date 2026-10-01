@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, type ChangeEvent } from "react";
-import { ArrowLeft, ImagePlus, MapPin, ShieldCheck } from "lucide-react";
-import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/mock-data";
+import { useState } from "react";
+import { ArrowLeft, MapPin, ShieldCheck } from "lucide-react";
+import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/profile-options";
 import { useProfiles } from "@/context/profiles-context";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -40,7 +40,6 @@ function SignupPage() {
   const [cidades, setCidades] = useState<{ id: number; nome: string }[]>([]); 
   const [orientation, setOrientation] = useState("Heterossexual");
   const [bio, setBio] = useState("");
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [lookingFor, setLookingFor] = useState<AccountType[]>([]);
   const [busy, setBusy] = useState(false);
   const { addProfile } = useProfiles();
@@ -356,42 +355,6 @@ function SignupPage() {
               Selecione um ou mais perfis. Isso define quem encontra você na busca.
             </p>
           </div>
-
-          <div>
-            <Label className="text-sm">Mídias</Label>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-  {[0, 1, 2].map((i) => (
-    <label
-      key={i}
-      className="grid aspect-square cursor-pointer place-items-center gap-1 rounded-lg border border-dashed border-border hover:bg-accent/50"
-    >
-      {/* Input invisível que abre a janela de arquivos do computador/celular */}
-      <input
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files && e.target.files[0]) {
-            // Se for o índice 0, salva como a foto principal/capa
-            if (i === 0) {
-              setAvatarFile(e.target.files[0]);
-            }
-          }
-        }}
-      />
-
-      <ImagePlus className="h-5 w-5" />
-      <span className="text-[10px]">
-        {i === 0 ? "Capa" : "Foto"}
-      </span>
-    </label>
-  ))}
-</div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              Fotos sensíveis podem ir direto para o álbum privado, com blur automático.
-            </p>
-          </div>
-      
 
         <button
           onClick={() => void handleSubmit()}

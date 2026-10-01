@@ -96,6 +96,7 @@ function formatTime(isoString: string) {
 function ChatPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [partners, setPartners] = useState<ChatPartner[]>([]);
+  const [conversationPartnerIds, setConversationPartnerIds] = useState<string[]>([]);
   const [conversationPreviews, setConversationPreviews] = useState<Record<string, string>>({});
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -106,7 +107,7 @@ function ChatPage() {
   const [privatePhotoPickerOpen, setPrivatePhotoPickerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const { openVipModal } = useVip();
+  const { isVip, openVipModal } = useVip();
 
   const openPrivatePhotoPicker = async () => {
     if (!currentUserId) return;
@@ -158,6 +159,10 @@ function ChatPage() {
         .select("id, user_a, user_b")
         .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
 
+      const partnerIds = (conversations ?? []).map((conversation) =>
+        conversation.user_a === user.id ? conversation.user_b : conversation.user_a,
+      );
+      setConversationPartnerIds(partnerIds);
       if (!conversations?.length) return;
 
       const partnerByConversation = new Map<string, string>();
@@ -190,6 +195,11 @@ function ChatPage() {
   useEffect(() => {
     async function loadConversationAndMessages() {
       if (!currentUserId || !activePartnerId) return;
+      if (!isVip && !conversationPartnerIds.includes(activePartnerId)) {
+        setActivePartnerId(null);
+        openVipModal();
+        return;
+      }
 
       let { data: conv } = await supabase
         .from("conversations")
@@ -251,7 +261,7 @@ function ChatPage() {
     }
 
     void loadConversationAndMessages();
-  }, [currentUserId, activePartnerId]);
+  }, [currentUserId, activePartnerId, isVip, conversationPartnerIds, openVipModal]);
 
   const handleSendMessage = async () => {
     if ((!draft.trim() && !selectedPrivatePhotos.length) || !currentUserId || !activeConversationId) return;
@@ -337,9 +347,9 @@ function ChatPage() {
 
   const partner = partners.find((p) => p.id === activePartnerId) ?? null;
   const activePreview = messages[messages.length - 1]?.body?.trim() || "Nenhuma mensagem ainda";
-  const filteredPartners = partners.filter((p) =>
-    p.nick.toLowerCase().includes(searchTerm.trim().toLowerCase()),
-  );
+  const filteredPartners = partners
+    .filter((p) => isVip || conversationPartnerIds.includes(p.id))
+    .filter((p) => p.nick.toLowerCase().includes(searchTerm.trim().toLowerCase()));
 
   useEffect(() => {
     setSelectedPrivatePhotos([]);
@@ -378,7 +388,7 @@ function ChatPage() {
               <div className="max-h-[calc(100vh-15rem)] space-y-2 overflow-y-auto p-2.5">
                 {filteredPartners.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-border bg-background/30 px-3 py-6 text-center text-sm text-muted-foreground">
-                    Nenhum contato encontrado.
+                    {isVip ? "Nenhum contato encontrado." : "Apenas VIPs podem iniciar chats. Você pode responder mensagens recebidas de assinantes!"}
                   </div>
                 ) : (
                   filteredPartners.map((p) => {
@@ -390,7 +400,13 @@ function ChatPage() {
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => setActivePartnerId(p.id)}
+                        onClick={() => {
+                          if (!isVip && !conversationPartnerIds.includes(p.id)) {
+                            openVipModal();
+                            return;
+                          }
+                          setActivePartnerId(p.id);
+                        }}
                         className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-all duration-200 ${
                           isActive
                             ? "border-primary/40 bg-primary/10 shadow-[0_0_0_1px_rgba(168,85,247,0.15)]"

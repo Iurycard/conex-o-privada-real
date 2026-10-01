@@ -1,11 +1,17 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 
-export const FREE_LIKE_LIMIT = 10;
+export const FREE_LIKE_LIMIT = 20;
+
+function todayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
 
 type VipContextValue = {
   isVip: boolean;
   setVip: (v: boolean) => void;
-  toggleVip: () => void;
   vipModalOpen: boolean;
   openVipModal: () => void;
   closeVipModal: () => void;
@@ -16,30 +22,69 @@ type VipContextValue = {
 const VipContext = createContext<VipContextValue | null>(null);
 
 export function VipProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [isVip, setVip] = useState(false);
   const [vipModalOpen, setVipModalOpen] = useState(false);
   const [likesUsedToday, setLikesUsedToday] = useState(0);
+  const storageKey = `conexao-privada:likes:${user?.id ?? "guest"}:${todayKey()}`;
+
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setVip(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    void supabase
+      .from("profiles")
+      .select("vip")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (active && !error) setVip(data?.vip ?? false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    try {
+      const stored = Number(window.localStorage.getItem(storageKey) ?? 0);
+      setLikesUsedToday(Number.isFinite(stored) ? stored : 0);
+    } catch {
+      setLikesUsedToday(0);
+    }
+  }, [storageKey]);
 
   const value = useMemo<VipContextValue>(
     () => ({
       isVip,
       setVip,
-      toggleVip: () => setVip((v) => !v),
       vipModalOpen,
       openVipModal: () => setVipModalOpen(true),
       closeVipModal: () => setVipModalOpen(false),
       likesUsedToday,
       tryUseLike: () => {
         if (isVip) return true;
-        if (likesUsedToday >= 20) {
+        if (likesUsedToday >= FREE_LIKE_LIMIT) {
           setVipModalOpen(true);
           return false;
         }
-        setLikesUsedToday((count) => count + 1);
+        const nextCount = likesUsedToday + 1;
+        setLikesUsedToday(nextCount);
+        try {
+          window.localStorage.setItem(storageKey, String(nextCount));
+        } catch {
+          // Keep the in-memory limit active when storage is unavailable.
+        }
         return true;
       },
     }),
-    [isVip, likesUsedToday, vipModalOpen],
+    [isVip, likesUsedToday, storageKey, vipModalOpen],
   );
 
   return <VipContext.Provider value={value}>{children}</VipContext.Provider>;

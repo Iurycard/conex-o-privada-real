@@ -30,13 +30,13 @@ Protótipo visual navegável, apenas frontend, com dados fictícios em memória.
 ## Regras Free vs VIP (simuladas)
 
 - Um alternador global de estado (Free/VIP) em contexto React, para demonstrar as duas experiências
-- Free: botão de nova conversa bloqueado com o aviso sobre iniciar chats; anexo de vídeo com "🔒 Vídeo (VIP)"; anúncios visíveis no feed
-- VIP: selo dourado, sem anúncios, chat e vídeo liberados, destaque no feed
+- Free: botão de nova conversa bloqueado com o aviso sobre iniciar chats; anúncios visíveis no feed
+- VIP: selo dourado, sem anúncios, chat liberado, destaque no feed
 - Álbum privado sempre desfocado com botão "Solicitar Acesso"
 
 ## Modal VIP
 
-Modal elegante com borda dourada, lista de benefícios (vídeos, iniciar chats, zero anúncios, destaque), planos e checkout simulado via Pix com QR fictício e botão "Já paguei" que apenas alterna o estado para VIP.
+Modal elegante com borda dourada, lista de benefícios (iniciar chats, zero anúncios, curtidas ilimitadas, destaque), planos e checkout simulado via Pix com QR fictício e botão "Já paguei" que apenas alterna o estado para VIP.
 
 ## Detalhes técnicos
 

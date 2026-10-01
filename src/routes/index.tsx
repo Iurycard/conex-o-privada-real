@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  Shield,
   EyeOff,
   Lock,
   Crown,
@@ -81,7 +80,7 @@ const mobileFeatures = [
   {
     icon: MessageCircle,
     title: "Chat privado",
-    text: "Converse quando quiser. Conteúdo de vídeo e novas conversas são liberados para VIPs.",
+    text: "Inicie novas conversas com discrição e privacidade.",
   },
 ];
 
@@ -254,7 +253,7 @@ function Landing() {
                 Camada <span className="text-gradient-gold">VIP</span>
               </h2>
               <p className="mt-1.5 max-w-lg text-sm text-muted-foreground">
-                Vídeos liberados, chats iniciados por você, zero anúncios e destaque dourado no feed
+                Chats iniciados por você, zero anúncios, curtidas ilimitadas e destaque dourado no feed
                 e no Explorar.
               </p>
             </div>

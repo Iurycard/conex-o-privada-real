@@ -28,7 +28,7 @@ Crie os seguintes fluxos e telas navegáveis com alta fidelidade visual:
 
    - Carrossel superior com stories/perfis próximos. Perfis VIP possuem moldura em gradiente dourado.
 
-   - Cards de publicação no feed com foto ou vídeo, área de curtidas e comentários.
+   - Cards de publicação no feed com fotos, área de curtidas e comentários.
 
    - Banners de anúncios locais discretos inseridos no feed a cada poucas postagens (com indicador visual de que usuários VIP não veem anúncios).
 
@@ -54,11 +54,11 @@ Crie os seguintes fluxos e telas navegáveis com alta fidelidade visual:
 
    - Para usuário Free: Botão de iniciar nova conversa bloqueado com aviso: "Apenas VIPs podem iniciar chats. Você pode responder mensagens recebidas de assinantes!".
 
-   - Botão de anexo no chat: Envio de foto liberado, mas opção de envio de vídeo com ícone de cadeado "🔒 Vídeo (VIP)".
+   - Botão de anexo no chat para compartilhamento de fotos por assinantes VIP.
 
 8. MODAL DE ASSINATURA VIP (CHECKOUT SIMULADO):
 
-   - Pop-up elegante com detalhes em dourado destacando os benefícios VIP (vídeos liberados, iniciar chats, zero anúncios e destaque no feed) com opção de pagamento simulado via Pix.
+   - Pop-up elegante com detalhes em dourado destacando os benefícios VIP (iniciar chats, zero anúncios, curtidas ilimitadas e destaque no feed) com opção de pagamento simulado via Pix.
 
 Foque apenas na interface de usuário, componentes interativos de navegação e protótipo visual no frontend, sem criar banco de dados real.
 

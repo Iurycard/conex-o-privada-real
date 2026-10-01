@@ -1,14 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { MapPin, Search, SlidersHorizontal, Plus, Crown } from "lucide-react";
+import { MapPin, Search, SlidersHorizontal } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { MediaBlock, PageHeader, TypeBadge, VipBadge } from "@/components/bits";
-import { EventCard } from "@/components/event-card";
-import { accountTypes, events, type AccountType } from "@/lib/mock-data";
-import { useProfiles } from "@/context/profiles-context";
+import { accountTypes, type AccountType } from "@/lib/profile-options";
+import { useProfiles, type Profile } from "@/context/profiles-context";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -17,20 +15,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
 import { useVip } from "@/context/vip";
 
 export const Route = createFileRoute("/_authenticated/explorar")({
   head: () => ({
     meta: [
-      { title: "Explorar perfis e eventos — Conexão Privada" },
+      { title: "Explorar perfis — Conexão Privada" },
       {
         name: "description",
         content:
-          "Descubra casais e solteiros próximos e a agenda de eventos, com filtro por perfil, distância e idade.",
+          "Descubra casais e solteiros próximos, com filtros por perfil, distância e idade.",
       },
-      { property: "og:title", content: "Explorar perfis e eventos — Conexão Privada" },
-      { property: "og:description", content: "Perfis próximos e eventos, com filtro por tipo, distância e idade." },
+      { property: "og:title", content: "Explorar perfis — Conexão Privada" },
+      { property: "og:description", content: "Perfis próximos, com filtro por tipo, distância e idade." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -40,8 +37,47 @@ export const Route = createFileRoute("/_authenticated/explorar")({
 
 const MAX_DISTANCE = 30;
 
+function profileAge(birthDate: string | null) {
+  if (!birthDate) return null;
+  const birth = new Date(`${birthDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  if (
+    today.getMonth() < birth.getMonth() ||
+    (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())
+  ) {
+    age -= 1;
+  }
+  return age;
+}
+
+function profileDistanceKm(profile: Profile, viewer: Profile | null) {
+  if (profile.city && viewer?.city && profile.city.trim().toLowerCase() === viewer.city.trim().toLowerCase()) {
+    return 0;
+  }
+  if (
+    typeof profile.latitude !== "number" ||
+    typeof profile.longitude !== "number" ||
+    typeof viewer?.latitude !== "number" ||
+    typeof viewer.longitude !== "number"
+  ) {
+    return null;
+  }
+
+  const radians = (value: number) => (value * Math.PI) / 180;
+  const latitudeDelta = radians(viewer.latitude - profile.latitude);
+  const longitudeDelta = radians(viewer.longitude - profile.longitude);
+  const latitudeOne = radians(profile.latitude);
+  const latitudeTwo = radians(viewer.latitude);
+  const arc =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(latitudeOne) * Math.cos(latitudeTwo) * Math.sin(longitudeDelta / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(arc), Math.sqrt(1 - arc));
+}
+
 function ExplorePage() {
-  const { profiles, isBlocked } = useProfiles();
+  const { profiles, current, isBlocked } = useProfiles();
   const { isVip, openVipModal } = useVip();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<string[]>([]);
@@ -57,6 +93,10 @@ function ExplorePage() {
         (filter.length === 0 || filter.includes(p.type)) &&
         (city === "Todas" || p.city === city) &&
         (lookingFor === "Todos" || (p.looking_for ?? []).includes(lookingFor as AccountType)) &&
+        ((ageRange[0] ?? 18) <= (profileAge(p.birth_date) ?? 0) &&
+          (profileAge(p.birth_date) ?? 0) <= (ageRange[1] ?? 65)) &&
+        ((distance[0] ?? MAX_DISTANCE) >= MAX_DISTANCE ||
+          (profileDistanceKm(p, current) ?? Number.POSITIVE_INFINITY) <= (distance[0] ?? MAX_DISTANCE)) &&
         p.nick.toLowerCase().includes(q.toLowerCase())
     )
     .sort((a, b) => Number(b.vip) - Number(a.vip));
@@ -69,19 +109,9 @@ function ExplorePage() {
 
   return (
     <AppShell>
-      <PageHeader title="Explorar" subtitle="Perfis verificados e eventos perto de você" />
+      <PageHeader title="Explorar" subtitle="Perfis verificados perto de você" />
 
-      <Tabs defaultValue="perfis" className="px-4 md:px-0">
-        <TabsList className="w-full bg-surface">
-          <TabsTrigger value="perfis" className="flex-1 px-2 text-xs sm:text-sm">
-            Perfis
-          </TabsTrigger>
-          <TabsTrigger value="eventos" className="flex-1 px-2 text-xs sm:text-sm">
-            Eventos & Baladas
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="perfis" className="mt-4 space-y-3">
+      <section className="space-y-3 px-4 md:px-0">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -260,7 +290,10 @@ function ExplorePage() {
                   {p.vip && <VipBadge className="absolute right-2 top-2" />}
                 </div>
                 <p className="mt-3 truncate text-sm font-semibold">
-                  {p.nick} <span className="text-muted-foreground">· {p.birth_date}</span>
+                  {p.nick}
+                  {profileAge(p.birth_date) !== null && (
+                    <span className="text-muted-foreground"> · {profileAge(p.birth_date)} anos</span>
+                  )}
                 </p>
                 <TypeBadge type={p.type} className="mt-1.5" />
                 <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{p.bio}</p>
@@ -275,23 +308,7 @@ function ExplorePage() {
               </p>
             )}
           </div>
-        </TabsContent>
-
-        <TabsContent value="eventos" className="mt-4">
-          <button
-            onClick={() => toast("Área de produtores — protótipo visual")}
-            className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-3 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <Plus className="h-4 w-4" /> Sou produtor — divulgar evento
-          </button>
-
-          <div className="grid gap-4 pb-6 md:grid-cols-2">
-            {events.map((e) => (
-              <EventCard key={e.id} id={e.id} />
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
+      </section>
     </AppShell>
   );
 }

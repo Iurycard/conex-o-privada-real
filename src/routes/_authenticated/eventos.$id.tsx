@@ -116,9 +116,10 @@ function EventDetailPage() {
 
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => {
-              void setStatus(ev.id, "going");
-              if (status !== "going") toast.success(`Presença confirmada em ${ev.title}`);
+            onClick={async () => {
+              const saved = await setStatus(ev.id, "going");
+              if (!saved) toast.error("Não foi possível atualizar sua presença");
+              else if (status !== "going") toast.success(`Presença confirmada em ${ev.title}`);
             }}
             className={`rounded-full px-4 py-3 text-sm font-semibold ${
               status === "going"
@@ -129,7 +130,10 @@ function EventDetailPage() {
             Vou
           </button>
           <button
-            onClick={() => void setStatus(ev.id, "interested")}
+            onClick={async () => {
+              const saved = await setStatus(ev.id, "interested");
+              if (!saved) toast.error("Não foi possível atualizar seu interesse");
+            }}
             className={`inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-3 text-sm font-medium ${
               status === "interested"
                 ? "border border-gold/50 bg-gold/10 text-gold"

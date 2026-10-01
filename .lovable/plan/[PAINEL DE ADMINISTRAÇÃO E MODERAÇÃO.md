@@ -13,7 +13,7 @@ Exiba 4 cards de estatísticas rápidas com ícones:
 * Tabela com busca rápida de usuários cadastrados no `mock-data`. 
 * Opções de alternar status do usuário (Ativo, Suspenso, Verificado).
 - Tab 3: "Auditoria de Mídias": 
-* Grid com as fotos/vídeos mais recentes dos álbuns com botão rápido de remoção imediata.
+* Grid com as fotos mais recentes dos álbuns com botão rápido de remoção imediata.
 - Tab 4: "Solicitações de Verificação":
 * Fila com fotos de verificação enviadas pelos usuários comparadas às fotos do perfil.
 * Botões de ação: "Conceder Selo Verificado" ou "Rejeitar Solicitação".

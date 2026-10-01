@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Camera, MapPin, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Camera, ShieldCheck } from "lucide-react";
 import { useState, type ChangeEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/mock-data";
+import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/profile-options";
 
 export const Route = createFileRoute("/_authenticated/editar-perfil")({
   head: () => ({

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/termos-de-servico")({
   component: TermsPage,
@@ -77,7 +77,7 @@ export const Route = createFileRoute("/termos-de-servico")({
               <li>Toda comunicação deve ser educada, cordial e respeitosa.</li>
               <li>O usuário é integralmente responsável por tudo que publicar.</li>
               <li>Proibido qualquer conteúdo que viole os princípios da plataforma.</li>
-              <li>É vedado publicar fotos/vídeos de terceiros sem autorização ou que contenham elementos ofensivos ou ilícitos.</li>
+              <li>É vedado publicar fotos de terceiros sem autorização ou que contenham elementos ofensivos ou ilícitos.</li>
               <li>A plataforma não se responsabiliza pelos seus dados em caso de perda e não é um serviço de “backup”.</li>
             </ul>
           </section>
@@ -172,7 +172,7 @@ export const Route = createFileRoute("/termos-de-servico")({
               12. Consentimento e Responsabilidade
             </h2>
             <p>
-              Ao publicar conteúdo, o usuário declara possuir os direitos sobre as imagens, vídeos e textos publicados e consente com sua exibição conforme as regras da plataforma. O Conexão Privada não se responsabiliza por violações de direitos autorais cometidas por usuários.
+              Ao publicar conteúdo, o usuário declara possuir os direitos sobre as imagens e textos publicados e consente com sua exibição conforme as regras da plataforma. O Conexão Privada não se responsabiliza por violações de direitos autorais cometidas por usuários.
             </p>
           </section>
 

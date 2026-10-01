@@ -1,7 +1,4 @@
-import {
-  type AccountType,
-  type Profile,
-} from "@/lib/mock-data";
+import type { AccountType } from "@/lib/profile-options";
 
 export type ProfileRow = {
   id: string;
@@ -31,7 +28,7 @@ function ageFrom(birthDate: string | null): number {
   return Math.max(18, Math.floor(diff / (365.25 * 24 * 3600 * 1000)));
 }
 
-export function rowToProfile(row: ProfileRow): Profile & { private_album: string[] } {
+export function rowToProfile(row: ProfileRow) {
 
   return {
     id: row.id,

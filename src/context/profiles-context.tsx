@@ -33,7 +33,6 @@ type ProfilesContextValue = {
   addProfile: (input: NewProfileInput) => Promise<string>;
   createPost: (input: {
     text: string;
-    mediaType?: "image" | "video" | undefined;
     mediaUrl?: string | undefined;
     wallProfileId?: string | undefined;
     album?: "public" | "private";
@@ -231,7 +230,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         setDbProfiles((list) => [profile, ...list.filter((p) => p.id !== profile.id)]);
         return profile.id;
       },
-      createPost: async ({ text, mediaType = "image", mediaUrl, wallProfileId, album = "public", mediaFile }) => {
+      createPost: async ({ text, mediaUrl, wallProfileId, album = "public", mediaFile }) => {
         const message = text.trim();
         if (!message && !mediaUrl && !mediaFile) return false;
 
@@ -274,7 +273,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
             author_id: targetAuthorId,
             wall_profile_id: wallProfileId ?? null,
             text: message,
-            media: mediaFile || mediaUrl ? (mediaType === "video" ? "video" : "foto") : null,
+            media: mediaFile || mediaUrl ? "foto" : null,
             image: finalImage ?? null,
           })
           .select("*, profiles!posts_author_id_fkey(*)")

@@ -7,12 +7,9 @@ import {
   MessageCircle,
   User,
   Crown,
-  Shield,
   UserPlus,
   PenSquare,
   Image as ImageIcon,
-  Lock,
-  Video,
   X,
 } from "lucide-react";
 import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
@@ -20,7 +17,6 @@ import { toast } from "sonner";
 import { useVip } from "@/context/vip";
 import { useProfiles } from "@/context/profiles-context";
 import { useSocial } from "@/hooks/use-social";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import logoimg from "@/assets/logo.png";
@@ -40,12 +36,10 @@ export function openPostComposer(album: "public" | "private" = "public") {
 }
 
 function PostButton() {
-  const { isVip, openVipModal } = useVip();
   const { createPost } = useProfiles();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<"image" | "video" | null>(null);
   const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -62,7 +56,6 @@ function PostButton() {
   const resetDraft = () => {
     setText("");
     setMediaUrl(null);
-    setMediaType(null);
     setVisibility("public");
     setSelectedFile(null);
   };
@@ -71,10 +64,9 @@ function PostButton() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const isVideo = file.type.startsWith("video/");
-    if (isVideo && !isVip) {
+    if (!file.type.startsWith("image/")) {
       event.target.value = "";
-      openVipModal();
+      toast.error("Selecione uma foto");
       return;
     }
 
@@ -84,7 +76,6 @@ function PostButton() {
     reader.onload = () => {
       if (typeof reader.result === "string") {
         setMediaUrl(reader.result);
-        setMediaType(isVideo ? "video" : "image");
       }
     };
     reader.readAsDataURL(file);
@@ -98,14 +89,8 @@ function PostButton() {
       return;
     }
 
-    if (mediaType === "video" && !isVip) {
-      openVipModal();
-      return;
-    }
-
     const saved = await createPost({
       text,
-      mediaType: mediaType ?? (mediaUrl ? "image" : undefined),
       mediaUrl: mediaUrl ?? undefined,
       album: visibility,
       mediaFile: selectedFile ?? undefined,
@@ -163,32 +148,16 @@ function PostButton() {
               <input type="file" accept="image/*" className="sr-only" onChange={handleMediaChange} />
             </label>
 
-            <label
-              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs ${
-                isVip
-                  ? "border-border bg-surface text-muted-foreground hover:text-foreground"
-                  : "border-gold/40 text-gold"
-              }`}
-            >
-              {isVip ? <Video className="h-4 w-4" /> : <Lock className="h-3.5 w-3.5" />}
-              {isVip ? "Vídeo" : "Vídeo (VIP)"}
-              <input type="file" accept="video/*" className="sr-only" onChange={handleMediaChange} />
-            </label>
           </div>
 
           {mediaUrl && (
             <div className="relative h-20 overflow-hidden rounded-xl border border-border bg-surface sm:h-28">
-              {mediaType === "video" ? (
-                <video src={mediaUrl} controls className="h-full w-full object-contain" />
-              ) : (
-                <img src={mediaUrl} alt="Mídia anexada" className="h-full w-full object-contain" />
-              )}
+              <img src={mediaUrl} alt="Foto anexada" className="h-full w-full object-contain" />
 
               <button
                 type="button"
                 onClick={() => {
                   setMediaUrl(null);
-                  setMediaType(null);
                   setSelectedFile(null);
                 }}
                 className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white"
@@ -289,7 +258,7 @@ function Logo() {
 
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { isVip, toggleVip, openVipModal } = useVip();
+  const { isVip, openVipModal } = useVip();
   const { unreadCount } = useSocial();
   const navigate = useNavigate();
 
@@ -300,8 +269,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Logo />
           <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
             <label className="hidden items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 sm:flex">
-              <span className="text-[11px] text-muted-foreground">Modo</span>
-              <Switch checked={isVip} onCheckedChange={toggleVip} aria-label="Alternar Free/VIP" />
               <span className={`text-[11px] font-semibold ${isVip ? "text-gold" : "text-muted-foreground"}`}>
                 {isVip ? "VIP" : "Free"}
               </span>

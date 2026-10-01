@@ -42,9 +42,7 @@ async function compressImage(file: File): Promise<File> {
 
 function uploadExtension(file: File) {
   if (file.type.startsWith("image/")) return "webp";
-  const extension = file.name.split(".").pop()?.toLowerCase();
-  if (extension && ["mp4", "mov", "webm"].includes(extension)) return extension;
-  throw new Error("Formato de mídia não suportado para o R2");
+  throw new Error("Selecione uma foto para enviar");
 }
 
 /** Compresses images and uploads media directly to R2 using a short-lived URL. */
@@ -77,22 +75,26 @@ export async function removeAlbumPhoto(path: string) {
   if (path.startsWith("http")) return;
   if (isR2Path(path)) {
     await deleteR2Object({ data: { key: path } });
-    signedUrlCache.delete(path);
+    for (const key of signedUrlCache.keys()) {
+      if (key.endsWith(`:${path}`)) signedUrlCache.delete(key);
+    }
     return;
   }
   await supabase.storage.from(ALBUM_BUCKET).remove([path]);
 }
 
 export async function resolveAlbumUrls(paths: string[], legacyPrefix?: string): Promise<(string | null)[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const cacheKey = (path: string) => `${user?.id ?? "anonymous"}:${path}`;
   const r2Paths = [...new Set(paths.filter((path) => path && isR2Path(path)))];
-  const missingR2Paths = r2Paths.filter((path) => (signedUrlCache.get(path)?.expiresAt ?? 0) <= Date.now());
+  const missingR2Paths = r2Paths.filter((path) => (signedUrlCache.get(cacheKey(path))?.expiresAt ?? 0) <= Date.now());
 
   for (let index = 0; index < missingR2Paths.length; index += 50) {
     const batch = missingR2Paths.slice(index, index + 50);
     try {
       const { urls } = await createR2ReadUrls({ data: { paths: batch } });
       for (const [path, url] of Object.entries(urls)) {
-        signedUrlCache.set(path, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
+        signedUrlCache.set(cacheKey(path), { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
       }
     } catch (error) {
       console.error("Erro ao gerar URL assinada do R2:", error);
@@ -110,7 +112,7 @@ export async function resolveAlbumUrls(paths: string[], legacyPrefix?: string): 
       continue;
     }
     if (isR2Path(path)) {
-      out.push(signedUrlCache.get(path)?.url ?? null);
+      out.push(signedUrlCache.get(cacheKey(path))?.url ?? null);
       continue;
     }
 

@@ -63,7 +63,7 @@ async function getAuthenticatedSupabase() {
 
 function assertR2Key(key: string, userId: string, ownerOnly = false) {
   const [ownerId, kind, marker, filename, ...extra] = key.split("/");
-  const validFilename = /^[a-zA-Z0-9-]+\.(webp|mp4|mov|webm)$/i.test(filename ?? "");
+  const validFilename = /^[a-zA-Z0-9-]+\.webp$/i.test(filename ?? "");
 
   if (
     extra.length > 0
@@ -87,9 +87,8 @@ export async function createR2UploadUrl(input: {
   const { user } = await getAuthenticatedSupabase();
   const { kind } = assertR2Key(input.key, user.id, true);
   const isWebp = input.contentType === "image/webp";
-  const isVideo = /^video\/[a-z0-9.+-]+$/i.test(input.contentType);
 
-  if ((!isWebp && !isVideo) || input.size < 1 || input.size > MAX_UPLOAD_BYTES) {
+  if (!isWebp || input.size < 1 || input.size > MAX_UPLOAD_BYTES) {
     throw new Error("Unsupported media type or file size");
   }
   if (kind === "private" && input.contentType !== "image/webp") {
@@ -111,12 +110,24 @@ export async function createR2ReadUrls(paths: string[]) {
   const { bucket, client } = getR2Config();
   const urls: Record<string, string> = {};
   const approvalCache = new Map<string, boolean>();
+  const vipCache = new Map<string, boolean>();
 
   for (const key of [...new Set(paths)]) {
     const { ownerId, kind } = assertR2Key(key, user.id);
     if (kind === "private" && ownerId !== user.id) {
       let approved = approvalCache.get(ownerId);
-      if (approved === undefined) {
+      let viewerIsVip = vipCache.get(user.id);
+      if (viewerIsVip === undefined) {
+        const { data: viewer, error } = await supabase
+          .from("profiles")
+          .select("vip")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (error) throw new Error(`Could not verify VIP status: ${error.message}`);
+        viewerIsVip = viewer?.vip ?? false;
+        vipCache.set(user.id, viewerIsVip);
+      }
+      if (viewerIsVip && approved === undefined) {
         const { data, error } = await supabase
           .from("album_access_requests")
           .select("id")
@@ -129,7 +140,7 @@ export async function createR2ReadUrls(paths: string[]) {
         approvalCache.set(ownerId, approved);
       }
 
-      if (!approved) {
+      if (!viewerIsVip || !approved) {
         const { data: attachment, error } = await supabase
           .from("message_attachments")
           .select("id")

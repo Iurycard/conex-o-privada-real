@@ -17,11 +17,11 @@ Substituir todo o conteúdo da landing (`src/routes/index.tsx`) a partir dos bot
    - Coluna esquerda: parágrafo descritivo + lista de 3 features com ícones circulares:
      - Feed curado (Heart) — Descubra casais e solteiros próximos com total controle de visibilidade.
      - Eventos & baladas (Calendar) — Festas, lounges e encontros selecionados com lista de presenças em tempo real.
-     - Chat privado (MessageCircle) — Converse quando quiser. Conteúdo de vídeo e novas conversas são liberados para VIPs.
+   - Chat privado (MessageCircle) — VIPs podem iniciar novas conversas; usuários Free podem responder mensagens recebidas.
    - Coluna direita: imagem gerada de mockup com 3 celulares exibindo telas dark do app (feed, eventos, chat), em card com borda arredondada — gerada via image generation, salva em `src/assets/app-phones.jpg`.
 
 4. **Card "Camada VIP"**
-   - Título com "VIP" em dourado, texto: "Vídeos liberados, chats iniciados por você, zero anúncios e destaque dourado no feed e no Explorar."
+   - Título com "VIP" em dourado, texto: "Chats iniciados por você, curtidas ilimitadas, zero anúncios e destaque dourado no feed e no Explorar."
    - Botão dourado "Conhecer benefícios" (link para /feed).
 
 5. **CTA final "Pronto para entrar?"**

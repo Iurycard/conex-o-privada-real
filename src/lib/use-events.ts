@@ -56,25 +56,29 @@ export function useEvents() {
     return (row?.status as AttendStatus) ?? "none";
   };
 
-  const setStatus = async (eventId: string, next: "going" | "interested") => {
-    if (!user) return;
+  const setStatus = async (eventId: string, next: "going" | "interested"): Promise<boolean> => {
+    if (!user) return false;
     const existing = attendees.find((a) => a.event_id === eventId && a.user_id === user.id);
     if (existing && existing.status === next) {
+      const { error } = await supabase.from("event_attendees").delete().eq("id", existing.id);
+      if (error) return false;
       setAttendees((list) => list.filter((a) => a.id !== existing.id));
-      await supabase.from("event_attendees").delete().eq("id", existing.id);
-      return;
+      return true;
     }
     if (existing) {
+      const { error } = await supabase.from("event_attendees").update({ status: next }).eq("id", existing.id);
+      if (error) return false;
       setAttendees((list) => list.map((a) => (a.id === existing.id ? { ...a, status: next } : a)));
-      await supabase.from("event_attendees").update({ status: next }).eq("id", existing.id);
-      return;
+      return true;
     }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("event_attendees")
       .insert({ event_id: eventId, user_id: user.id, status: next })
       .select("id, event_id, user_id, status")
       .single();
-    if (data) setAttendees((list) => [...list, data as AttendeeRow]);
+    if (error || !data) return false;
+    setAttendees((list) => [...list, data as AttendeeRow]);
+    return true;
   };
 
   const attendeeIds = (eventId: string, status?: "going" | "interested") =>

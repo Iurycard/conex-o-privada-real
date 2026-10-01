@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarDays, MapPin, Users, Star, Plus } from "lucide-react";
+import { CalendarDays, MapPin, Users, Star } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { MediaBlock, PageHeader, VipBadge } from "@/components/bits";
 import { eventCovers } from "@/lib/event-covers";
@@ -31,7 +31,7 @@ function EventCard({
   going: number;
   interested: number;
   status: string;
-  onSet: (next: "going" | "interested") => void;
+  onSet: (next: "going" | "interested") => Promise<boolean>;
 }) {
   const cover = ev.cover_key ? eventCovers[ev.cover_key] : undefined;
 
@@ -89,9 +89,10 @@ function EventCard({
 
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button
-            onClick={() => {
-              onSet("going");
-              if (status !== "going") toast.success(`Presença confirmada em ${ev.title}`);
+            onClick={async () => {
+              const saved = await onSet("going");
+              if (!saved) toast.error("Não foi possível atualizar sua presença");
+              else if (status !== "going") toast.success(`Presença confirmada em ${ev.title}`);
             }}
             className={`rounded-full px-4 py-2.5 text-sm font-semibold transition-opacity ${
               status === "going"
@@ -102,7 +103,10 @@ function EventCard({
             Vou
           </button>
           <button
-            onClick={() => onSet("interested")}
+            onClick={async () => {
+              const saved = await onSet("interested");
+              if (!saved) toast.error("Não foi possível atualizar seu interesse");
+            }}
             className={`inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-medium ${
               status === "interested"
                 ? "border border-gold/50 bg-gold/10 text-gold"
@@ -125,12 +129,6 @@ function EventsPage() {
       <PageHeader title="Eventos & Baladas" subtitle="Produtoras e casas parceiras divulgando as próximas festas" />
 
       <div className="px-4 md:px-0">
-        <button
-          onClick={() => toast("Área de produtores — em breve")}
-          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-3 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <Plus className="h-4 w-4" /> Sou produtor — divulgar evento
-        </button>
       </div>
 
       <div className="grid gap-4 px-4 pb-6 md:grid-cols-2 md:px-0">
@@ -142,7 +140,7 @@ function EventsPage() {
             going={countFor(ev, "going")}
             interested={countFor(ev, "interested")}
             status={myStatus(ev.id)}
-            onSet={(next) => void setStatus(ev.id, next)}
+            onSet={(next) => setStatus(ev.id, next)}
           />
         ))}
       </div>

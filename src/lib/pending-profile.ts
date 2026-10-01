@@ -1,4 +1,4 @@
-import type { AccountType } from "@/lib/mock-data";
+import type { AccountType } from "@/lib/profile-options";
 
 export type PendingProfile = {
   nick: string;

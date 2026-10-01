@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Flag, Heart, MessageSquare, MoreHorizontal, Play, Lock, UserRound, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Flag, Heart, MessageSquare, MoreHorizontal, UserRound, X } from "lucide-react";
+import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AvatarOrb, MediaBlock, VipBadge } from "@/components/bits";
 import { ReportDialog, type ReportTarget } from "@/components/report-dialog";
@@ -47,7 +47,7 @@ export function PostCard({
   authorProfile?: NonNullable<ReturnType<typeof useProfiles>["posts"][number]["profiles"]>;
 }) {
   const author = post.profiles ?? authorProfile;
-  const { isVip, openVipModal } = useVip();
+  const { tryUseLike } = useVip();
   const {
     currentId,
     likePost,
@@ -70,6 +70,11 @@ export function PostCard({
   const [editedText, setEditedText] = useState(post.text);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
   const isOwnPost = currentId === post.author_id;
+
+  const handlePostLike = async () => {
+    if (!isPostLiked(post.id) && !tryUseLike()) return;
+    await likePost(post.id);
+  };
 
   const loadLikes = async () => {
     setLoadingLikes(true);
@@ -215,10 +220,8 @@ export function PostCard({
         <FeedPhotoLightbox
           post={post}
           author={author}
-          isVip={isVip}
-          openVipModal={openVipModal}
           isLiked={isPostLiked(post.id)}
-          onLike={() => void likePost(post.id)}
+          onLike={() => void handlePostLike()}
           onOpenOptions={() => setOptionsOpen(true)}
           onOpenComments={() => {
             setCommentsOpen(true);
@@ -230,7 +233,7 @@ export function PostCard({
       <div className="flex items-center gap-2 border-t border-border/60 px-4 py-2">
         <button
           type="button"
-          onClick={() => likePost(post.id)}
+          onClick={() => void handlePostLike()}
           className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-surface-2 hover:text-primary-glow"
           aria-label={`Curtir publicação de ${author.nick}`}
         >
@@ -333,13 +336,6 @@ export function PostCard({
                               <UserRound className="mr-2 h-4 w-4" /> Visitar @
                               {item.profile?.nick ?? "perfil"}
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                toast.info("As curtidas deste comentário aparecerão aqui.")
-                              }
-                            >
-                              <Heart className="mr-2 h-4 w-4" /> Ver curtidas
-                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
@@ -405,8 +401,6 @@ export function PostCard({
 function FeedPhotoLightbox({
   post,
   author,
-  isVip,
-  openVipModal,
   isLiked,
   onLike,
   onOpenOptions,
@@ -414,8 +408,6 @@ function FeedPhotoLightbox({
 }: {
   post: ReturnType<typeof useProfiles>["posts"][number];
   author: NonNullable<ReturnType<typeof useProfiles>["posts"][number]["profiles"]>;
-  isVip: boolean;
-  openVipModal: () => void;
   isLiked: boolean;
   onLike: () => void;
   onOpenOptions: () => void;
@@ -434,24 +426,6 @@ function FeedPhotoLightbox({
             alt={`Ilustração do post de ${author.nick}`}
             className="aspect-[4/3] w-full"
           />
-          {post.media === "video" && (
-            <div className="absolute inset-0 grid place-items-center">
-              {isVip ? (
-                <span className="grid h-14 w-14 place-items-center rounded-full bg-background/70 backdrop-blur">
-                  <Play className="h-6 w-6 text-foreground" />
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={openVipModal}
-                  className="flex flex-col items-center gap-2 rounded-2xl bg-background/70 px-6 py-4 backdrop-blur"
-                >
-                  <Lock className="h-5 w-5 text-gold" />
-                  <span className="text-xs font-medium text-gold">Vídeo exclusivo para VIP</span>
-                </button>
-              )}
-            </div>
-          )}
         </button>
       </DialogTrigger>
       <DialogContent className="!left-0 !top-0 !translate-x-0 !translate-y-0 inset-0 flex h-[100dvh] w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-black p-0 text-white [&>button:last-child]:hidden">
@@ -522,6 +496,7 @@ function FeedPage() {
   const [tab, setTab] = useState("all");
 
   const visiblePosts = posts.filter((post) => {
+    if (post.media && post.media !== "foto") return false;
     if (!post.profiles) return false;
     if (post.wall_profile_id) return false;
     if (isBlocked(post.author_id)) return false;
