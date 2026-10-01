@@ -178,35 +178,6 @@ export type Database = {
         }
         Relationships: []
       }
-      message_attachments: {
-        Row: {
-          created_at: string
-          id: string
-          message_id: string
-          storage_path: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          message_id: string
-          storage_path: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          message_id?: string
-          storage_path?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "message_attachments_message_id_fkey"
-            columns: ["message_id"]
-            isOneToOne: false
-            referencedRelation: "messages"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       messages: {
         Row: {
           body: string
@@ -311,39 +282,6 @@ export type Database = {
         }
         Relationships: []
       }
-      reports: {
-        Row: {
-          created_at: string
-          details: string | null
-          id: string
-          post_id: string | null
-          reason: string
-          reported_profile_id: string | null
-          reporter_id: string
-          status: string
-        }
-        Insert: {
-          created_at?: string
-          details?: string | null
-          id?: string
-          post_id?: string | null
-          reason: string
-          reported_profile_id?: string | null
-          reporter_id: string
-          status?: string
-        }
-        Update: {
-          created_at?: string
-          details?: string | null
-          id?: string
-          post_id?: string | null
-          reason?: string
-          reported_profile_id?: string | null
-          reporter_id?: string
-          status?: string
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           avatar: string | null
@@ -353,14 +291,10 @@ export type Database = {
           cover: string | null
           created_at: string
           gender: string | null
-          orientation: string | null
           hue: number
           id: string
-          latitude: number | null
-          longitude: number | null
           looking_for: string[]
           nick: string
-          username: string
           private_album: string[]
           public_album: string[]
           type: string
@@ -375,14 +309,10 @@ export type Database = {
           cover?: string | null
           created_at?: string
           gender?: string | null
-          orientation?: string | null
           hue?: number
           id: string
-          latitude?: number | null
-          longitude?: number | null
           looking_for?: string[]
           nick: string
-          username: string
           private_album?: string[]
           public_album?: string[]
           type?: string
@@ -397,180 +327,15 @@ export type Database = {
           cover?: string | null
           created_at?: string
           gender?: string | null
-          orientation?: string | null
           hue?: number
           id?: string
-          latitude?: number | null
-          longitude?: number | null
           looking_for?: string[]
           nick?: string
-          username?: string
           private_album?: string[]
           public_album?: string[]
           type?: string
           updated_at?: string
           vip?: boolean
-        }
-        Relationships: []
-      }
-      posts: {
-        Row: {
-          id: string
-          author_id: string
-          text: string
-          media: string | null
-          image: string | null
-          wall_profile_id: string | null
-          likes: number
-          comments: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          author_id: string
-          text?: string
-          media?: string | null
-          image?: string | null
-          wall_profile_id?: string | null
-          likes?: number
-          comments?: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          author_id?: string
-          text?: string
-          media?: string | null
-          image?: string | null
-          wall_profile_id?: string | null
-          likes?: number
-          comments?: number
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "posts_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      post_likes: {
-        Row: {
-          id: string
-          post_id: string
-          user_id: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          post_id: string
-          user_id: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          post_id?: string
-          user_id?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      post_comments: {
-        Row: {
-          id: string
-          post_id: string
-          user_id: string
-          body: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          post_id: string
-          user_id: string
-          body: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          post_id?: string
-          user_id?: string
-          body?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      user_blocks: {
-        Row: {
-          blocked_id: string
-          blocker_id: string
-          created_at: string
-          id: string
-        }
-        Insert: {
-          blocked_id: string
-          blocker_id: string
-          created_at?: string
-          id?: string
-        }
-        Update: {
-          blocked_id?: string
-          blocker_id?: string
-          created_at?: string
-          id?: string
-        }
-        Relationships: []
-      }
-      album_photo_likes: {
-        Row: {
-          id: string
-          profile_id: string
-          photo_path: string
-          user_id: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          profile_id: string
-          photo_path: string
-          user_id: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          profile_id?: string
-          photo_path?: string
-          user_id?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      album_photo_comments: {
-        Row: {
-          id: string
-          profile_id: string
-          photo_path: string
-          user_id: string
-          body: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          profile_id: string
-          photo_path: string
-          user_id: string
-          body: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          profile_id?: string
-          photo_path?: string
-          user_id?: string
-          body?: string
-          created_at?: string
         }
         Relationships: []
       }
