@@ -269,6 +269,117 @@ export type Database = {
         }
         Relationships: []
       }
+      post_comments: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          post_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          post_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          post_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_likes: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      posts: {
+        Row: {
+          author_id: string
+          comments: number
+          created_at: string
+          id: string
+          image: string | null
+          likes: number
+          media: string | null
+          text: string
+          updated_at: string
+          wall_profile_id: string | null
+        }
+        Insert: {
+          author_id: string
+          comments?: number
+          created_at?: string
+          id?: string
+          image?: string | null
+          likes?: number
+          media?: string | null
+          text?: string
+          updated_at?: string
+          wall_profile_id?: string | null
+        }
+        Update: {
+          author_id?: string
+          comments?: number
+          created_at?: string
+          id?: string
+          image?: string | null
+          likes?: number
+          media?: string | null
+          text?: string
+          updated_at?: string
+          wall_profile_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profile_likes: {
         Row: {
           created_at: string
@@ -311,39 +422,6 @@ export type Database = {
         }
         Relationships: []
       }
-      reports: {
-        Row: {
-          created_at: string
-          details: string | null
-          id: string
-          post_id: string | null
-          reason: string
-          reported_profile_id: string | null
-          reporter_id: string
-          status: string
-        }
-        Insert: {
-          created_at?: string
-          details?: string | null
-          id?: string
-          post_id?: string | null
-          reason: string
-          reported_profile_id?: string | null
-          reporter_id: string
-          status?: string
-        }
-        Update: {
-          created_at?: string
-          details?: string | null
-          id?: string
-          post_id?: string | null
-          reason?: string
-          reported_profile_id?: string | null
-          reporter_id?: string
-          status?: string
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           avatar: string | null
@@ -353,18 +431,18 @@ export type Database = {
           cover: string | null
           created_at: string
           gender: string | null
-          orientation: string | null
           hue: number
           id: string
           latitude: number | null
           longitude: number | null
           looking_for: string[]
           nick: string
-          username: string
+          orientation: string | null
           private_album: string[]
           public_album: string[]
           type: string
           updated_at: string
+          username: string
           vip: boolean
         }
         Insert: {
@@ -375,18 +453,18 @@ export type Database = {
           cover?: string | null
           created_at?: string
           gender?: string | null
-          orientation?: string | null
           hue?: number
           id: string
           latitude?: number | null
           longitude?: number | null
           looking_for?: string[]
           nick: string
-          username: string
+          orientation?: string | null
           private_album?: string[]
           public_album?: string[]
           type?: string
           updated_at?: string
+          username?: string
           vip?: boolean
         }
         Update: {
@@ -397,110 +475,65 @@ export type Database = {
           cover?: string | null
           created_at?: string
           gender?: string | null
-          orientation?: string | null
           hue?: number
           id?: string
           latitude?: number | null
           longitude?: number | null
           looking_for?: string[]
           nick?: string
-          username?: string
+          orientation?: string | null
           private_album?: string[]
           public_album?: string[]
           type?: string
           updated_at?: string
+          username?: string
           vip?: boolean
         }
         Relationships: []
       }
-      posts: {
+      reports: {
         Row: {
-          id: string
-          author_id: string
-          text: string
-          media: string | null
-          image: string | null
-          wall_profile_id: string | null
-          likes: number
-          comments: number
           created_at: string
+          details: string | null
+          id: string
+          post_id: string | null
+          reason: string
+          reported_profile_id: string | null
+          reporter_id: string
+          status: string
+          updated_at: string
         }
         Insert: {
-          id?: string
-          author_id: string
-          text?: string
-          media?: string | null
-          image?: string | null
-          wall_profile_id?: string | null
-          likes?: number
-          comments?: number
           created_at?: string
+          details?: string | null
+          id?: string
+          post_id?: string | null
+          reason: string
+          reported_profile_id?: string | null
+          reporter_id: string
+          status?: string
+          updated_at?: string
         }
         Update: {
-          id?: string
-          author_id?: string
-          text?: string
-          media?: string | null
-          image?: string | null
-          wall_profile_id?: string | null
-          likes?: number
-          comments?: number
           created_at?: string
+          details?: string | null
+          id?: string
+          post_id?: string | null
+          reason?: string
+          reported_profile_id?: string | null
+          reporter_id?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "posts_author_id_fkey"
-            columns: ["author_id"]
+            foreignKeyName: "reports_post_id_fkey"
+            columns: ["post_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "posts"
             referencedColumns: ["id"]
-          }
+          },
         ]
-      }
-      post_likes: {
-        Row: {
-          id: string
-          post_id: string
-          user_id: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          post_id: string
-          user_id: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          post_id?: string
-          user_id?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      post_comments: {
-        Row: {
-          id: string
-          post_id: string
-          user_id: string
-          body: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          post_id: string
-          user_id: string
-          body: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          post_id?: string
-          user_id?: string
-          body?: string
-          created_at?: string
-        }
-        Relationships: []
       }
       user_blocks: {
         Row: {
@@ -523,54 +556,24 @@ export type Database = {
         }
         Relationships: []
       }
-      album_photo_likes: {
+      user_roles: {
         Row: {
-          id: string
-          profile_id: string
-          photo_path: string
-          user_id: string
           created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
         }
         Insert: {
-          id?: string
-          profile_id: string
-          photo_path: string
-          user_id: string
           created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
         }
         Update: {
+          created_at?: string
           id?: string
-          profile_id?: string
-          photo_path?: string
+          role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      album_photo_comments: {
-        Row: {
-          id: string
-          profile_id: string
-          photo_path: string
-          user_id: string
-          body: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          profile_id: string
-          photo_path: string
-          user_id: string
-          body: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          profile_id?: string
-          photo_path?: string
-          user_id?: string
-          body?: string
-          created_at?: string
         }
         Relationships: []
       }
@@ -579,10 +582,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -709,6 +718,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const

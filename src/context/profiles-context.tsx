@@ -479,7 +479,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       getPostComments: async (postId: string) => {
         const { data, error } = await supabase
           .from("post_comments")
-          .select("id, post_id, user_id, body, created_at")
+          .select("id, post_id, user_id, body, created_at, updated_at")
           .eq("post_id", postId)
           .order("created_at", { ascending: true });
         if (error) return [];
