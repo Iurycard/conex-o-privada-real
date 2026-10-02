@@ -53,6 +53,7 @@ type ProfilesContextValue = {
   likePost: (postId: string) => Promise<void>;
   isPostLiked: (postId: string) => boolean;
   addComment: (postId: string, text: string) => Promise<void>;
+  deleteComment: (commentId: string) => Promise<boolean>;
   getPostLikes: (postId: string) => Promise<Profile[]>;
   getPostComments: (postId: string) => Promise<PostComment[]>;
 };
@@ -448,6 +449,22 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         if (post.author_id !== user.id) {
           await notify(post.author_id, "comment", "comentou na sua publicação");
         }
+      },
+      deleteComment: async (commentId) => {
+        if (!user) return false;
+        const { data, error } = await supabase
+          .from("post_comments")
+          .delete()
+          .eq("id", commentId)
+          .eq("user_id", user.id)
+          .select("post_id")
+          .maybeSingle();
+        if (error || !data) return false;
+
+        setPosts((list) => list.map((post) =>
+          post.id === data.post_id ? { ...post, comments: Math.max(0, post.comments - 1) } : post,
+        ));
+        return true;
       },
       getPostLikes: async (postId: string) => {
         const { data, error } = await supabase

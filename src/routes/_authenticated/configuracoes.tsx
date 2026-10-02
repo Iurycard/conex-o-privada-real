@@ -313,8 +313,16 @@ function SettingsPage() {
       return;
     }
     toast.success("Foto adicionada ao álbum");
-  } catch {
-    toast.error("Não foi possível salvar a foto");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("Cloudflare R2 server environment is incomplete")) {
+      toast.error(`Configure as variáveis do R2 no servidor: ${message.split(": ").slice(1).join(": ")}`);
+    } else if (message.includes("CORS")) {
+      toast.error("O R2 bloqueou o upload. Confira a política CORS do bucket para este domínio.");
+    } else {
+      console.error("Erro ao salvar foto privada:", error);
+      toast.error(message || "Não foi possível salvar a foto. Verifique as configurações do R2.");
+    }
   } finally {
     event.target.value = "";
   }

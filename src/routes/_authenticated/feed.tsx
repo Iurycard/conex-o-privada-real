@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Flag, Heart, MessageSquare, MoreHorizontal, UserRound, X } from "lucide-react";
+import { Flag, Heart, MessageSquare, MoreHorizontal, Trash2, UserRound, X } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AvatarOrb, MediaBlock, VipBadge } from "@/components/bits";
@@ -53,6 +53,7 @@ export function PostCard({
     likePost,
     isPostLiked,
     addComment,
+    deleteComment,
     getPostLikes,
     getPostComments,
     updatePost,
@@ -263,8 +264,14 @@ export function PostCard({
               ) : likes.length ? (
                 likes.map((profile) => (
                   <div key={profile.id} className="flex items-start gap-3">
-                    <AvatarOrb profile={profile} size={36} />
-                    <span className="text-sm font-medium">@{profile.nick}</span>
+                    <AvatarOrb profile={profile} size={36} profileId={profile.id} clickable />
+                    <Link
+                      to="/perfil/$id"
+                      params={{ id: profile.id }}
+                      className="text-sm font-medium hover:underline"
+                    >
+                      @{profile.nick}
+                    </Link>
                   </div>
                 ))
               ) : (
@@ -303,15 +310,23 @@ export function PostCard({
                 comments.map((item) => (
                   <div key={item.id} className="flex gap-3">
                     {item.profile ? (
-                      <AvatarOrb profile={item.profile} size={32} ring={true} />
+                      <AvatarOrb profile={item.profile} size={32} ring={true} profileId={item.profile.id} clickable />
                     ) : (
                       <div className="h-8 w-8 rounded-full bg-surface-2" />
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-start gap-2">
-                        <p className="min-w-0 flex-1 text-xs font-semibold">
-                          @{item.profile?.nick ?? "usuário"}
-                        </p>
+                        {item.profile ? (
+                          <Link
+                            to="/perfil/$id"
+                            params={{ id: item.profile.id }}
+                            className="min-w-0 flex-1 truncate text-xs font-semibold hover:underline"
+                          >
+                            @{item.profile.nick}
+                          </Link>
+                        ) : (
+                          <p className="min-w-0 flex-1 text-xs font-semibold">@usuário</p>
+                        )}
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             type="button"
@@ -337,18 +352,35 @@ export function PostCard({
                               {item.profile?.nick ?? "perfil"}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => {
-                                setCommentsOpen(false);
-                                setReportTarget({
-                                  reportedProfileId: item.user_id,
-                                  details: `Comentário: ${item.body}`,
-                                });
-                              }}
-                            >
-                              <Flag className="mr-2 h-4 w-4" /> Denunciar comentário
-                            </DropdownMenuItem>
+                            {item.user_id === currentId ? (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={async () => {
+                                  const removed = await deleteComment(item.id);
+                                  if (!removed) {
+                                    toast.error("Não foi possível excluir o comentário");
+                                    return;
+                                  }
+                                  setComments((current) => current.filter((commentItem) => commentItem.id !== item.id));
+                                  toast.success("Comentário excluído");
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" /> Excluir comentário
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => {
+                                  setCommentsOpen(false);
+                                  setReportTarget({
+                                    reportedProfileId: item.user_id,
+                                    details: `Comentário: ${item.body}`,
+                                  });
+                                }}
+                              >
+                                <Flag className="mr-2 h-4 w-4" /> Denunciar comentário
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -383,7 +415,7 @@ export function PostCard({
         />
         <button
           type="submit"
-          className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-gradient-primary px-3 py-2 text-[11px] font-semibold text-primary-foreground shadow-neon sm:text-xs"
           disabled={!comment.trim()}
         >
           Comentar

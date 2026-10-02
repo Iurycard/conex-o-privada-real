@@ -27,8 +27,15 @@ function getR2Config(): R2Config {
   const secretAccessKey = process.env["CLOUDFLARE_R2_SECRET_ACCESS_KEY"];
   const bucket = process.env["CLOUDFLARE_R2_BUCKET_NAME"];
 
-  if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
-    throw new Error("Cloudflare R2 server environment is incomplete");
+  const missing = [
+    !accountId && "CLOUDFLARE_R2_ACCOUNT_ID",
+    !accessKeyId && "CLOUDFLARE_R2_ACCESS_KEY_ID",
+    !secretAccessKey && "CLOUDFLARE_R2_SECRET_ACCESS_KEY",
+    !bucket && "CLOUDFLARE_R2_BUCKET_NAME",
+  ].filter((name): name is string => Boolean(name));
+
+  if (missing.length) {
+    throw new Error(`Cloudflare R2 server environment is incomplete: ${missing.join(", ")}`);
   }
 
   r2Config = {

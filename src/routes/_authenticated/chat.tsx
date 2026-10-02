@@ -436,7 +436,7 @@ function ChatPage() {
                           <Link
                             to="/perfil/$id"
                             params={{ id: p.id }}
-                            className="block truncate text-sm font-medium text-foreground hover:underline"
+                            className="inline-block max-w-full truncate text-sm font-medium text-foreground hover:underline"
                             aria-label={`Ver perfil de ${p.nick}`}
                             onClick={(event) => event.stopPropagation()}
                           >
@@ -490,12 +490,8 @@ function ChatPage() {
                         >
                           {partner.nick}
                         </Link>
-                        <p className="text-[11px] text-muted-foreground">Online agora</p>
                       </div>
                     </div>
-                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-300">
-                      ao vivo
-                    </span>
                   </header>
 
                   <div className="flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(168,85,247,0.16),_transparent_35%)] p-3 sm:p-4">

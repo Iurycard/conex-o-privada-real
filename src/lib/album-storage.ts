@@ -45,7 +45,7 @@ function uploadExtension(file: File) {
   throw new Error("Selecione uma foto para enviar");
 }
 
-/** Compresses images and uploads media directly to R2 using a short-lived URL. */
+/** Compresses images and stores public photos in Supabase and private photos in R2. */
 export async function uploadAlbumPhotos(
   userId: string,
   kind: "public" | "private",
@@ -55,16 +55,35 @@ export async function uploadAlbumPhotos(
   for (const file of files) {
     const preparedFile = await compressImage(file);
     const extension = uploadExtension(preparedFile);
-    const key = `${userId}/${kind}/r2/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
     const contentType = preparedFile.type || "application/octet-stream";
+
+    if (kind === "public") {
+      const path = `${userId}/public/${filename}`;
+      const { error } = await supabase.storage.from(ALBUM_BUCKET).upload(path, preparedFile, {
+        contentType,
+        upsert: false,
+      });
+      if (error) throw new Error(`Falha no upload Supabase: ${error.message}`);
+      paths.push(path);
+      continue;
+    }
+
+    const key = `${userId}/private/r2/${filename}`;
     const signedUpload = await createR2UploadUrl({
       data: { key, contentType, size: preparedFile.size },
     });
-    const response = await fetch(signedUpload.url, {
-      method: "PUT",
-      headers: signedUpload.headers,
-      body: preparedFile,
-    });
+    let response: Response;
+    try {
+      response = await fetch(signedUpload.url, {
+        method: "PUT",
+        headers: signedUpload.headers,
+        body: preparedFile,
+      });
+    } catch (error) {
+      console.error("Falha de rede ou CORS no upload R2:", error);
+      throw new Error("Falha de rede/CORS no upload R2. Verifique a política CORS do bucket e tente novamente.");
+    }
     if (!response.ok) throw new Error(`Falha no upload R2 (${response.status})`);
     paths.push(key);
   }

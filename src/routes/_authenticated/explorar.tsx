@@ -87,18 +87,21 @@ function ExplorePage() {
   const [lookingFor, setLookingFor] = useState<string>("Todos");
 
   const list = profiles
-    .filter(
-      (p) =>
-        !isBlocked(p.id) &&
+    .filter((p) => {
+      const age = profileAge(p.birth_date);
+      const matchesAge = age === null
+        ? ageRange[0] === 18 && ageRange[1] === 65
+        : age >= (ageRange[0] ?? 18) && age <= (ageRange[1] ?? 65);
+
+      return !isBlocked(p.id) &&
         (filter.length === 0 || filter.includes(p.type)) &&
         (city === "Todas" || p.city === city) &&
         (lookingFor === "Todos" || (p.looking_for ?? []).includes(lookingFor as AccountType)) &&
-        ((ageRange[0] ?? 18) <= (profileAge(p.birth_date) ?? 0) &&
-          (profileAge(p.birth_date) ?? 0) <= (ageRange[1] ?? 65)) &&
+        matchesAge &&
         ((distance[0] ?? MAX_DISTANCE) >= MAX_DISTANCE ||
           (profileDistanceKm(p, current) ?? Number.POSITIVE_INFINITY) <= (distance[0] ?? MAX_DISTANCE)) &&
-        p.nick.toLowerCase().includes(q.toLowerCase())
-    )
+        p.nick.toLowerCase().includes(q.toLowerCase());
+    })
     .sort((a, b) => Number(b.vip) - Number(a.vip));
 
   const activeFilters =

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   Bell,
   Settings,
@@ -18,7 +18,6 @@ import { useVip } from "@/context/vip";
 import { useProfiles } from "@/context/profiles-context";
 import { useSocial } from "@/hooks/use-social";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import logoimg from "@/assets/logo.png";
 import {
   Dialog,
@@ -89,12 +88,24 @@ function PostButton() {
       return;
     }
 
-    const saved = await createPost({
-      text,
-      mediaUrl: mediaUrl ?? undefined,
-      album: visibility,
-      mediaFile: selectedFile ?? undefined,
-    });
+    let saved: boolean;
+    try {
+      saved = await createPost({
+        text,
+        mediaUrl: mediaUrl ?? undefined,
+        album: visibility,
+        mediaFile: selectedFile ?? undefined,
+      });
+    } catch (error) {
+      console.error("Erro ao publicar conteúdo:", error);
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("Cloudflare R2 server environment is incomplete:")) {
+        toast.error(`Upload indisponível. Configure no servidor: ${message.split(": ")[1]}`);
+      } else {
+        toast.error("Não foi possível enviar a foto. Verifique a conexão e tente novamente.");
+      }
+      return;
+    }
 
     if (!saved) {
       toast.error("Não foi possível salvar a publicação");
@@ -229,11 +240,12 @@ function PostButton() {
 }
 
 const navItems = [
-  { to: "/feed", label: "Feed", icon: Home },
-  { to: "/explorar", label: "Explorar", icon: Compass },
-  { to: "/notificacoes", label: "Notificações", icon: Bell },
-  { to: "/chat", label: "Chat", icon: MessageCircle },
-  { to: "/perfil", label: "Perfil", icon: User },
+  { to: "/feed", label: "Feed", mobileLabel: "Feed", icon: Home },
+  { to: "/explorar", label: "Explorar", mobileLabel: "Busca", icon: Compass },
+  { to: "/notificacoes", label: "Notificações", mobileLabel: "Avisos", icon: Bell },
+  { to: "/chat", label: "Chat", mobileLabel: "Chat", icon: MessageCircle },
+  { to: "/perfil", label: "Perfil", mobileLabel: "Perfil", icon: User },
+  { to: "/configuracoes", label: "Configurações", mobileLabel: "Ajustes", icon: Settings },
 ] as const;
 
 
@@ -260,7 +272,6 @@ function Logo() {
 export function AppShell({ children }: { children: ReactNode }) {
   const { isVip, openVipModal } = useVip();
   const { unreadCount } = useSocial();
-  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background">
@@ -286,17 +297,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <PostButton />
 
 
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => navigate({ to: "/configuracoes" })}
-              className="h-10 w-10 shrink-0 rounded-full border-border bg-surface text-muted-foreground hover:bg-surface-2 hover:text-foreground"
-              aria-label="Abrir configurações"
-              title="Configurações"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
           </div>
         </div>
       </header>
@@ -335,17 +335,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </aside>
 
-        <main className="min-w-0 flex-1 pb-24 md:pb-10">{children}</main>
+        <main className="min-w-0 flex-1 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-10">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 backdrop-blur-xl md:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5">
-          {navItems.map(({ to, label, icon: Icon }) => (
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
+        <div className="mx-auto flex h-16 max-w-md">
+          {navItems.map(({ to, label, mobileLabel, icon: Icon }) => (
             <Link
               key={to}
               to={to}
               activeProps={{ className: "text-primary-glow" }}
-              className="relative flex flex-col items-center gap-1 py-2.5 text-[10px] text-muted-foreground"
+              className="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden py-1 text-[10px] text-muted-foreground"
             >
               <span className="relative">
                 <Icon className="h-5 w-5" />
@@ -355,7 +355,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </span>
                 )}
               </span>
-              {label}
+              <span className="max-w-full truncate">{mobileLabel ?? label}</span>
             </Link>
           ))}
         </div>
