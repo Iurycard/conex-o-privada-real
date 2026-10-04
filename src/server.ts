@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { handleWorkerApi } from "./lib/d1-api";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -44,11 +45,20 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+function getWorkerEnv(env: unknown) {
+  if (env && typeof env === "object") return env;
+  return (globalThis as typeof globalThis & { __env__?: unknown }).__env__;
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const workerEnv = getWorkerEnv(env);
+      if (new URL(request.url).pathname.startsWith("/api/")) {
+        return await handleWorkerApi(request, workerEnv);
+      }
       const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
+      const response = await handler.fetch(request, workerEnv, ctx);
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);

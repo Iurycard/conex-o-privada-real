@@ -4,18 +4,21 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "npm run build && npm run db:init:local && npm run db:seed:local && npm run cf:dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "db:init": "wrangler d1 execute coexaoprivada --remote --file=schema_d1.sql",
+    "db:seed": "wrangler d1 execute coexaoprivada --remote --file=seed_d1.sql",
+    "db:init:local": "wrangler d1 execute coexaoprivada --local --persist-to .wrangler/state --file=schema_d1.sql",
+    "db:seed:local": "wrangler d1 execute coexaoprivada --local --persist-to .wrangler/state --file=seed_d1.sql",
+    "cf:dev": "wrangler dev --config .output/server/wrangler.json --persist-to .wrangler/state --port 8080",
+    "cf:deploy": "wrangler deploy --config .output/server/wrangler.json",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1143.0",
-    "@aws-sdk/s3-request-presigner": "^3.1143.0",
     "@hookform/resolvers": "^5.2.2",
-    "@lovable.dev/cloud-auth-js": "^1.1.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -42,7 +45,6 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@supabase/supabase-js": "^2.115.0",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/react-query": "^5.101.1",
     "@tanstack/react-router": "1.170.41",
@@ -86,6 +88,7 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "wrangler": "^4.147.0"
   }
 }

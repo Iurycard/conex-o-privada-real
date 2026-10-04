@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
+import { authRequest } from "@/lib/d1-client";
 
 const shouldBypassAuth = import.meta.env.DEV && import.meta.env["VITE_SKIP_AUTH"] === "true";
 
@@ -15,9 +15,9 @@ export const Route = createFileRoute("/_authenticated")({
       };
     }
 
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/entrar" });
-    return { user: data.user };
+    const { data: user } = await authRequest<{ id: string; email: string; app_metadata: { role: string } }>("/api/auth/session");
+    if (!user) throw redirect({ to: "/entrar" });
+    return { user };
   },
   component: () => <Outlet />,
 });

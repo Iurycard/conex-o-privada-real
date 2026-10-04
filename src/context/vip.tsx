@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { d1 } from "@/lib/d1-client"
 import { useAuth } from "@/hooks/use-auth";
 
 export const FREE_LIKE_LIMIT = 20;
@@ -37,7 +37,7 @@ export function VipProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    void supabase
+    void d1
       .from("profiles")
       .select("vip")
       .eq("id", user.id)

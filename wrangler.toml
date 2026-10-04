@@ -1,0 +1,16 @@
+name = "coexaoprivada"
+main = ".output/server/index.mjs"
+compatibility_date = "2026-10-03"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "coexaoprivada"
+database_id = "3243f88b-2502-404c-baf8-80cd34980a3c"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "coexaoprivada"
+
+[observability]
+enabled = true

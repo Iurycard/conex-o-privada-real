@@ -2,8 +2,9 @@ import { useState, useMemo, useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { FileText, ShieldAlert, Users } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import { d1 } from "@/lib/d1-client"
+import type { Tables } from "@/lib/database-types";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute('/_authenticated/admin')({
   component: AdminUsersManagement,
@@ -11,6 +12,7 @@ export const Route = createFileRoute('/_authenticated/admin')({
 
 function AdminUsersManagement() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<Tables<"profiles">[]>([]);
   const [reports, setReports] = useState<Tables<"reports">[]>([]);
@@ -20,21 +22,20 @@ function AdminUsersManagement() {
 
   useEffect(() => {
     async function checkAdmin() {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
+      if (!user) {
         navigate({ to: "/entrar" });
         return;
       }
-      if (user.app_metadata["role"] !== "admin") {
+      if (user.app_metadata.role !== "admin") {
         toast.error("Acesso restrito à administração");
         navigate({ to: "/" });
         return;
       }
 
       const [profilesResult, reportsResult, postsResult] = await Promise.all([
-        supabase.from("profiles").select("*").order("created_at", { ascending: false }),
-        supabase.from("reports").select("*").eq("status", "pending").order("created_at", { ascending: false }),
-        supabase.from("posts").select("id", { count: "exact", head: true }),
+        d1.from("profiles").select("*").order("created_at", { ascending: false }),
+        d1.from("reports").select("*").eq("status", "pending").order("created_at", { ascending: false }),
+        d1.from("posts").select("id", { count: "exact", head: true }),
       ]);
 
       if (profilesResult.error) toast.error("Não foi possível carregar os perfis");
@@ -49,10 +50,10 @@ function AdminUsersManagement() {
       setLoading(false);
     }
     checkAdmin();
-  }, [navigate]);
+  }, [navigate, user]);
 
   const handleResolveReport = async (reportId: string) => {
-    const { error } = await supabase.from("reports").update({ status: "resolved" }).eq("id", reportId);
+    const { error } = await d1.from("reports").update({ status: "resolved" }).eq("id", reportId);
     if (error) {
       toast.error("Não foi possível atualizar a denúncia");
       return;
@@ -75,7 +76,7 @@ function AdminUsersManagement() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400">Carregando dados do Supabase…</p>
+        <p className="text-sm text-slate-400">Carregando dados do D1…</p>
       ) : (
         <>
 

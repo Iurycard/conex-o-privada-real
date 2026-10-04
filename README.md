@@ -84,3 +84,5 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+The development command runs the app through Wrangler with local D1/R2 bindings. It initializes the local database and serves the app at `http://localhost:8080`; it does not write to Cloudflare resources.

@@ -13,20 +13,6 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    // Public (publishable) backend settings baked into the build so hosted builds
-    // work even when .env is not shipped with the source.
-    define: {
-      "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
-        process.env['VITE_SUPABASE_URL'] || "https://dgmuirfsiwqomomiyays.supabase.co",
-      ),
-      "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
-        process.env['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
-          "sb_publishable_cA5aMTNX2gMJozMg4QZrTA_UVMetIFe",
-      ),
-      "import.meta.env.VITE_SUPABASE_PROJECT_ID": JSON.stringify(
-        process.env['VITE_SUPABASE_PROJECT_ID'] || "dgmuirfsiwqomomiyays",
-      ),
-    },
     server: {
       watch: {
         usePolling: true,

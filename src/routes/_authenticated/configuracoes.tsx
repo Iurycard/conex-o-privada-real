@@ -39,8 +39,8 @@ import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/context/profiles-context";
 import { useVip } from "@/context/vip";
 import { useSocial } from "@/hooks/use-social";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 import { removeAlbumPhoto, uploadAlbumPhotos, useAlbumUrls } from "@/lib/album-storage";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
@@ -262,6 +262,7 @@ function SettingsPage() {
   const location = useLocation();
   const { openVipModal } = useVip();
   const { current, posts, profiles, updatePrivateAlbum } = useProfiles();
+  const { user, signOut } = useAuth();
   const social = useSocial();
   const [darkMode, setDarkMode] = useState(true);
   const [albumsOpen, setAlbumsOpen] = useState(false);
@@ -284,7 +285,7 @@ function SettingsPage() {
   }
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     navigate({ to: "/", replace: true });
   };
   
@@ -294,7 +295,6 @@ function SettingsPage() {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     toast.error("Usuário não autenticado");
     return;
@@ -409,7 +409,14 @@ function SettingsPage() {
             {security.map((item) => {
               const { icon: Icon, ...rest } = item;
 
-              return <SettingsRow key={item.label} icon={Icon} {...rest} onClick={() => showPrototype(item.label)} />;
+              return (
+                <SettingsRow
+                  key={item.label}
+                  icon={Icon}
+                  {...rest}
+                  onClick={() => item.label === "Alterar senha" ? navigate({ to: "/redefinir-senha" }) : showPrototype(item.label)}
+                />
+              );
             })}
           </SettingsSection>
 

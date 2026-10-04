@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Tables } from "@/integrations/supabase/types";
+import { Tables } from "@/lib/database-types";
 import { rowToProfile, type ProfileRow } from "@/lib/profile-mapping";
 import { clearPendingProfile, readPendingProfile } from "@/lib/pending-profile";
 import { removeAlbumPhoto, uploadAlbumPhotos } from "@/lib/album-storage";
-import { supabase } from "@/integrations/supabase/client";
+import { d1 } from "@/lib/d1-client"
 import { useAuth } from "@/hooks/use-auth";
 
 export type Profile = Tables<"profiles">;
@@ -82,9 +82,9 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
 
     const pending = readPendingProfile();
     if (pending) {
-      const { data: mine } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
+      const { data: mine } = await d1.from("profiles").select("id").eq("id", user.id).maybeSingle();
       if (!mine) {
-        await supabase.from("profiles").insert({
+        await d1.from("profiles").insert({
           id: user.id,
           nick: pending.nick,
           username: (pending.username || pending.nick).trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
@@ -101,7 +101,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       clearPendingProfile();
     }
 
-    const { data: profilesData } = await supabase
+    const { data: profilesData } = await d1
       .from("profiles")
       .select("*")
       .order("created_at", { ascending: false });
@@ -109,7 +109,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       setDbProfiles((profilesData as ProfileRow[]).map(rowToProfile) as unknown as Profile[]);
     }
 
-    const { data: postsData } = await supabase
+    const { data: postsData } = await d1
       .from("posts")
       .select("*, profiles!posts_author_id_fkey(*)")
       .order("created_at", { ascending: false });
@@ -119,20 +119,20 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       setPosts(normalizedPosts);
     }
 
-    const { data: likesData } = await supabase
+    const { data: likesData } = await d1
       .from("post_likes")
       .select("post_id")
       .eq("user_id", user.id);
     setLikedPostIds(new Set((likesData ?? []).map((like) => like.post_id)));
 
-    const { data: blockedData, error: blockedError } = await supabase
+    const { data: blockedData, error: blockedError } = await d1
       .from("user_blocks")
       .select("blocked_id")
       .eq("blocker_id", user.id);
     if (!blockedError) setBlockedIds((blockedData ?? []).map((row) => row.blocked_id));
 
     if (user) {
-      const { data: followsData } = await supabase
+      const { data: followsData } = await d1
         .from("follows")
         .select("following_id")
         .eq("follower_id", user.id);
@@ -160,7 +160,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
   const notify = useCallback(
     async (targetId: string, type: string, body: string) => {
       if (!user || !targetId || targetId === user.id) return;
-      await supabase.from("notifications").insert({
+      await d1.from("notifications").insert({
         user_id: targetId,
         actor_id: user.id,
         type,
@@ -221,7 +221,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           longitude: input.longitude ?? null,
           looking_for: input.lookingFor ?? [],
         };
-        const { data, error } = await supabase
+        const { data, error } = await d1
           .from("profiles")
           .upsert(payload)
           .select("*")
@@ -248,7 +248,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
             const currentProfile = profiles.find((profile) => profile.id === targetAuthorId);
             const currentAlbum = currentProfile?.private_album ?? [];
             const nextAlbum = [...new Set([path, ...currentAlbum])];
-            const { data: savedProfile, error } = await supabase
+            const { data: savedProfile, error } = await d1
               .from("profiles")
               .update({ private_album: nextAlbum })
               .eq("id", targetAuthorId)
@@ -268,7 +268,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
 
         if (!currentId) return false;
 
-        const { data, error } = await supabase
+        const { data, error } = await d1
           .from("posts")
           .insert({
             author_id: targetAuthorId,
@@ -298,7 +298,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         const authorId = currentId;
         if (!authorId) return false;
 
-        const { data, error } = await supabase
+        const { data, error } = await d1
           .from("posts")
           .update({ text: message })
           .eq("id", postId)
@@ -319,7 +319,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         const post = posts.find((item) => item.id === postId);
         if (!authorId || !post || post.author_id !== authorId) return false;
 
-        const { error } = await supabase
+        const { error } = await d1
           .from("posts")
           .delete()
           .eq("id", postId)
@@ -336,7 +336,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       },
       updatePrivateAlbum: async (photos) => {
         if (user && currentId === user.id) {
-          const { data, error } = await supabase
+          const { data, error } = await d1
             .from("profiles")
             .update({ private_album: photos })
             .eq("id", user.id)
@@ -361,7 +361,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       updateCurrentProfile: (changes) => {
         if (user && currentId === user.id) {
           patchDbProfile(currentId, changes);
-          void supabase
+          void d1
             .from("profiles")
             .update({
               ...(changes.nick !== undefined ? { nick: changes.nick } : {}),
@@ -385,14 +385,14 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       blockProfile: async (id) => {
         if (!user || id === user.id) return false;
         if (blockedIds.includes(id)) return true;
-        const { error } = await supabase.from("user_blocks").insert({ blocker_id: user.id, blocked_id: id });
+        const { error } = await d1.from("user_blocks").insert({ blocker_id: user.id, blocked_id: id });
         if (error) return false;
         setBlockedIds((ids) => (ids.includes(id) ? ids : [...ids, id]));
         return true;
       },
       unblockProfile: async (id) => {
         if (!user) return false;
-        const { error } = await supabase
+        const { error } = await d1
           .from("user_blocks")
           .delete()
           .eq("blocker_id", user.id)
@@ -408,9 +408,9 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         setFollowing((f) => ({ ...f, [id]: !f[id] }));
         if (!user) return;
         if (currentlyFollowing) {
-          await supabase.from("follows").delete().eq("follower_id", user.id).eq("following_id", id);
+          await d1.from("follows").delete().eq("follower_id", user.id).eq("following_id", id);
         } else {
-          await supabase.from("follows").insert({ follower_id: user.id, following_id: id });
+          await d1.from("follows").insert({ follower_id: user.id, following_id: id });
         }
       },
       likePost: async (postId: string) => {
@@ -418,8 +418,8 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         if (!post || !user) return;
         const alreadyLiked = likedPostIds.has(postId);
         const interaction = alreadyLiked
-          ? await supabase.from("post_likes").delete().eq("post_id", postId).eq("user_id", user.id)
-          : await supabase.from("post_likes").insert({ post_id: postId, user_id: user.id });
+          ? await d1.from("post_likes").delete().eq("post_id", postId).eq("user_id", user.id)
+          : await d1.from("post_likes").insert({ post_id: postId, user_id: user.id });
         if (interaction.error) return;
         const newLikes = Math.max(0, post.likes + (alreadyLiked ? -1 : 1));
         setLikedPostIds((ids) => {
@@ -439,7 +439,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         const post = posts.find((p) => p.id === postId);
         const body = text.trim();
         if (!post || !body || !user) return;
-        const { error: commentError } = await supabase
+        const { error: commentError } = await d1
           .from("post_comments")
           .insert({ post_id: postId, user_id: user.id, body });
         if (commentError) return;
@@ -452,7 +452,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       },
       deleteComment: async (commentId) => {
         if (!user) return false;
-        const { data, error } = await supabase
+        const { data, error } = await d1
           .from("post_comments")
           .delete()
           .eq("id", commentId)
@@ -467,7 +467,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         return true;
       },
       getPostLikes: async (postId: string) => {
-        const { data, error } = await supabase
+        const { data, error } = await d1
           .from("post_likes")
           .select("user_id")
           .eq("post_id", postId);
@@ -477,7 +477,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         return profiles.filter((profile) => ids.has(profile.id));
       },
       getPostComments: async (postId: string) => {
-        const { data, error } = await supabase
+        const { data, error } = await d1
           .from("post_comments")
           .select("id, post_id, user_id, body, created_at, updated_at")
           .eq("post_id", postId)

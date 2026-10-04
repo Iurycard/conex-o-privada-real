@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Check, ImagePlus, Lock, SendHorizontal } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { d1 } from "@/lib/d1-client"
 import { AppShell } from "@/components/app-shell";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useVip } from "@/context/vip";
 import { useAlbumUrls } from "@/lib/album-storage";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/_authenticated/chat")({
   head: () => ({
@@ -108,13 +109,14 @@ function ChatPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const { isVip, openVipModal } = useVip();
+  const { user } = useAuth();
 
   const openPrivatePhotoPicker = async () => {
-    if (!currentUserId) return;
-    const { data: profile, error } = await supabase
+    if (!user) return;
+    const { data: profile, error } = await d1
       .from("profiles")
       .select("vip, private_album")
-      .eq("id", currentUserId)
+      .eq("id", user.id)
       .maybeSingle();
 
     if (error || !profile) {
@@ -129,7 +131,7 @@ function ChatPage() {
       return;
     }
 
-    const photos = (profile.private_album ?? []).filter((path) => path.startsWith(`${currentUserId}/private/`));
+    const photos = (profile.private_album ?? []).filter((path) => path.startsWith(`${user.id}/private/`));
     setPrivatePhotoPaths(photos);
     if (!photos.length) {
       toast(profile.private_album?.length
@@ -142,22 +144,18 @@ function ChatPage() {
 
   useEffect(() => {
     async function init() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) return;
       setCurrentUserId(user.id);
 
-      const { data: profiles } = await supabase.from("profiles").select("id, nick, avatar").neq("id", user.id);
+      const { data: profiles } = await d1.from("profiles").select("id, nick, avatar").neq("id", user.id);
 
       if (profiles && profiles.length > 0) {
         setPartners(profiles);
       }
 
-      const { data: conversations } = await supabase
+      const { data: conversations } = await d1
         .from("conversations")
-        .select("id, user_a, user_b")
-        .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+        .select("id, user_a, user_b");
 
       const partnerIds = (conversations ?? []).map((conversation) =>
         conversation.user_a === user.id ? conversation.user_b : conversation.user_a,
@@ -173,7 +171,7 @@ function ChatPage() {
         );
       }
 
-      const { data: latestMessages } = await supabase
+      const { data: latestMessages } = await d1
         .from("messages")
         .select("id, sender_id, conversation_id, body, created_at")
         .in("conversation_id", [...partnerByConversation.keys()])
@@ -190,7 +188,7 @@ function ChatPage() {
     }
 
     void init();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     async function loadConversationAndMessages() {
@@ -201,16 +199,14 @@ function ChatPage() {
         return;
       }
 
-      let { data: conv } = await supabase
-        .from("conversations")
-        .select("id")
-        .or(
-          `and(user_a.eq.${currentUserId},user_b.eq.${activePartnerId}),and(user_a.eq.${activePartnerId},user_b.eq.${currentUserId})`,
-        )
-        .maybeSingle();
+      const { data: conversations } = await d1.from("conversations").select("id, user_a, user_b");
+      let conv = (conversations ?? []).find((conversation) =>
+        (conversation.user_a === currentUserId && conversation.user_b === activePartnerId)
+        || (conversation.user_a === activePartnerId && conversation.user_b === currentUserId),
+      ) ?? null;
 
       if (!conv) {
-        const { data: newConv } = await supabase
+        const { data: newConv } = await d1
           .from("conversations")
           .insert([{ user_a: currentUserId, user_b: activePartnerId }])
           .select("id")
@@ -221,7 +217,7 @@ function ChatPage() {
       if (conv) {
         setActiveConversationId(conv.id);
 
-        const { data: msgList } = await supabase
+        const { data: msgList } = await d1
           .from("messages")
           .select("*")
           .eq("conversation_id", conv.id)
@@ -231,7 +227,7 @@ function ChatPage() {
         const messageIds = loadedMessages.map((message) => message.id);
         let attachments: ChatAttachment[] = [];
         if (messageIds.length) {
-          const { data: attachmentRows, error: attachmentError } = await supabase
+          const { data: attachmentRows, error: attachmentError } = await d1
             .from("message_attachments")
             .select("*")
             .in("message_id", messageIds);
@@ -269,7 +265,7 @@ function ChatPage() {
     const text = draft.trim();
     const photoPaths = [...selectedPrivatePhotos];
 
-    const { data, error } = await supabase
+    const { data, error } = await d1
       .from("messages")
       .insert([
         {
@@ -282,7 +278,7 @@ function ChatPage() {
       .single();
 
     if (error) {
-      console.error("Erro ao gravar mensagem no Supabase:", {
+      console.error("Erro ao gravar mensagem no D1:", {
         code: error.code,
         message: error.message,
         details: error.details,
@@ -296,12 +292,12 @@ function ChatPage() {
 
     let attachments: ChatAttachment[] = [];
     if (photoPaths.length) {
-      const { data: attachmentRows, error: attachmentError } = await supabase
+      const { data: attachmentRows, error: attachmentError } = await d1
         .from("message_attachments")
         .insert(photoPaths.map((storagePath) => ({ message_id: data.id, storage_path: storagePath })))
         .select("*");
       if (attachmentError || (attachmentRows ?? []).length !== photoPaths.length) {
-        console.error("Erro ao gravar anexos privados no Supabase:", {
+        console.error("Erro ao gravar anexos privados no D1:", {
           code: attachmentError?.code,
           message: attachmentError?.message ?? "Quantidade de anexos gravados diferente da selecionada",
           details: attachmentError?.details,
@@ -316,7 +312,7 @@ function ChatPage() {
             [activePartnerId]: messagePreview(data as ChatMessage, currentUserId),
           }));
         }
-        toast.error("A mensagem foi criada, mas o Supabase não gravou as fotos. A seleção foi mantida.");
+        toast.error("A mensagem foi criada, mas o banco não gravou as fotos. A seleção foi mantida.");
         return;
       }
       attachments = attachmentRows as ChatAttachment[];
@@ -336,7 +332,7 @@ function ChatPage() {
     }
 
     if (activePartnerId && activePartnerId !== currentUserId) {
-      await supabase.from("notifications").insert({
+      await d1.from("notifications").insert({
         user_id: activePartnerId,
         actor_id: currentUserId,
         type: "message",

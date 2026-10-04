@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { authRequest } from "@/lib/d1-client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -15,13 +15,14 @@ export const Route = createFileRoute("/redefinir-senha")({
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
 
   const updatePassword = async () => {
-    if (password.length < 6) {
-      toast.error("A senha precisa ter pelo menos 6 caracteres");
+    if (password.length < 12) {
+      toast.error("A senha precisa ter pelo menos 12 caracteres");
       return;
     }
     if (password !== confirmation) {
@@ -29,14 +30,14 @@ function ResetPasswordPage() {
       return;
     }
     setBusy(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error } = await authRequest("/api/auth/password", { currentPassword, newPassword: password });
     setBusy(false);
     if (error) {
-      toast.error("O link expirou. Solicite uma nova recuperação");
+      toast.error(error.message);
       return;
     }
     toast.success("Senha atualizada com sucesso");
-    navigate({ to: "/entrar" });
+    navigate({ to: "/configuracoes" });
   };
 
   return (
@@ -49,8 +50,15 @@ function ResetPasswordPage() {
       </header>
       <main className="mx-auto w-full max-w-sm px-5 pb-16 pt-10">
         <h2 className="text-2xl font-semibold text-foreground">Crie uma nova senha</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Escolha uma senha nova para voltar à sua conta.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Confirme sua senha atual para definir uma senha nova.</p>
         <div className="mt-8 space-y-4">
+          <div>
+            <Label htmlFor="current-password">Senha atual</Label>
+            <div className="relative mt-2">
+              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="border-border bg-surface pl-9" />
+            </div>
+          </div>
           <div>
             <Label htmlFor="new-password">Nova senha</Label>
             <div className="relative mt-2">

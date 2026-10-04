@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { d1 } from "@/lib/d1-client"
+import { useAuth } from "@/hooks/use-auth";
 
 export type ReportTarget = {
   reportedProfileId?: string;
@@ -34,6 +35,7 @@ const reasons = [
 ];
 
 export function ReportDialog({ open, onOpenChange, target }: ReportDialogProps) {
+  const { user } = useAuth();
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -46,16 +48,12 @@ export function ReportDialog({ open, onOpenChange, target }: ReportDialogProps) 
 
   const submitReport = async () => {
     if (!target || !reason || (!target.reportedProfileId && !target.postId)) return;
-    setSubmitting(true);
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      setSubmitting(false);
+    if (!user) {
       toast.error("Entre na sua conta para enviar uma denúncia");
       return;
     }
-
-    const { error } = await supabase.from("reports").insert({
+    setSubmitting(true);
+    const { error } = await d1.from("reports").insert({
       reporter_id: user.id,
       reported_profile_id: target.reportedProfileId ?? null,
       post_id: target.postId ?? null,
@@ -63,13 +61,11 @@ export function ReportDialog({ open, onOpenChange, target }: ReportDialogProps) 
       details: details.trim() || null,
       status: "pending",
     });
-
     setSubmitting(false);
     if (error) {
       toast.error("Não foi possível enviar a denúncia");
       return;
     }
-
     toast.success("Denúncia enviada para moderação");
     onOpenChange(false);
   };

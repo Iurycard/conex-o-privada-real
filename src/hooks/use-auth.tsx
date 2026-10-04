@@ -1,46 +1,61 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { authRequest } from "@/lib/d1-client";
 
-
-type AuthContextValue = {
-  session: Session | null;
-  user: User | null;
-  loading: boolean;
+export type AuthUser = {
+  id: string;
+  email: string;
+  app_metadata: { role: string };
 };
 
-const AuthContext = createContext<AuthContextValue>({ session: null, user: null, loading: true });
+type AuthContextValue = {
+  user: AuthUser | null;
+  loading: boolean;
+  refresh: () => Promise<void>;
+  signOut: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextValue>({
+  user: null,
+  loading: true,
+  refresh: async () => {},
+  signOut: async () => {},
+});
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const refresh = useCallback(async () => {
+    const { data } = await authRequest<AuthUser>("/api/auth/session");
+    setUser(data);
+    setLoading(false);
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await authRequest<never>("/api/auth/logout", {});
+    setUser(null);
+    window.dispatchEvent(new Event("cp:auth-changed"));
+  }, []);
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    }
-  );
-
-  return () => {
-    subscription.unsubscribe();
-  };
-}, []);
-
-const user = session?.user ?? null;
+    void refresh();
+    const onAuthChange = () => void refresh();
+    window.addEventListener("cp:auth-changed", onAuthChange);
+    window.addEventListener("focus", onAuthChange);
+    return () => {
+      window.removeEventListener("cp:auth-changed", onAuthChange);
+      window.removeEventListener("focus", onAuthChange);
+    };
+  }, [refresh]);
 
   const value = useMemo(
-    () => ({ 
-      session,
-      user, 
+    () => ({
+      user,
       loading,
+      refresh,
+      signOut,
     }),
-    [session, user, loading],
+    [user, loading, refresh, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

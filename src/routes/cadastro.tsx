@@ -4,13 +4,14 @@ import { ArrowLeft, MapPin, ShieldCheck } from "lucide-react";
 import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/profile-options";
 import { useProfiles } from "@/context/profiles-context";
 import { useEffect } from "react";
-import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
-import { savePendingProfile } from "@/lib/pending-profile";
+import { useAuth, type AuthUser } from "@/hooks/use-auth";
+import { authRequest } from "@/lib/d1-client";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { ProfileAvatarPicker } from "@/components/profile-avatar-picker";
+import { d1 } from "@/lib/d1-client";
+import { removeAlbumPhoto, uploadAlbumPhotos } from "@/lib/album-storage";
 import { toast } from "sonner";
 
 
@@ -40,10 +41,11 @@ function SignupPage() {
   const [cidades, setCidades] = useState<{ id: number; nome: string }[]>([]); 
   const [orientation, setOrientation] = useState("Heterossexual");
   const [bio, setBio] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [lookingFor, setLookingFor] = useState<AccountType[]>([]);
   const [busy, setBusy] = useState(false);
   const { addProfile } = useProfiles();
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const navigate = useNavigate();
 
     // 1. Carrega os estados do Brasil ao abrir a tela
@@ -69,27 +71,20 @@ function SignupPage() {
   const toggleLooking = (t: AccountType) =>
     setLookingFor((list) => (list.includes(t) ? list.filter((x) => x !== t) : [...list, t]));
 
-  const signUpWithGoogle = async () => {
-    if (!nick.trim() || !username.trim()) {
-      toast.error("Informe o nome do perfil e o usuário");
-      return;
+  const saveAvatar = async (profileId: string) => {
+    if (!avatarFile) return;
+    const [path] = await uploadAlbumPhotos(profileId, "public", [avatarFile]);
+    if (!path) throw new Error("Não foi possível enviar a foto");
+
+    const { error } = await d1.from("profiles").update({ avatar: path }).eq("id", profileId);
+    if (error) {
+      try {
+        await removeAlbumPhoto(path);
+      } catch (cleanupError) {
+        console.error("Não foi possível remover o avatar após falha ao salvar o perfil:", cleanupError);
+      }
+      throw new Error(error.message || "Não foi possível salvar a foto no perfil");
     }
-    savePendingProfile({
-      nick: nick.trim(),
-      username: username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
-      type,
-      city: city.trim(),
-      bio: bio.trim(),
-      hue: 300,
-      lookingFor,
-      orientation,
-    });
-    setBusy(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/entrar`,
-    });
-    setBusy(false);
-    if (result.error) toast.error("Não foi possível continuar com o Google");
   };
 
   const handleSubmit = async () => {
@@ -111,60 +106,65 @@ function SignupPage() {
     if (user) {
       setBusy(true);
       try {
-        await addProfile(payload);
+        const profileId = await addProfile(payload);
+        await saveAvatar(profileId);
         toast.success("Perfil criado");
         navigate({ to: "/feed" });
-      } catch {
-        toast.error("Não foi possível salvar o perfil");
+      } catch (error) {
+        console.error("Erro ao criar perfil:", error);
+        toast.error(error instanceof Error ? error.message : "Não foi possível salvar o perfil");
       } finally {
         setBusy(false);
       }
       return;
     }
 
-    if (!email.trim() || password.length < 6) {
-      toast.error("Informe um e-mail e uma senha com pelo menos 6 caracteres");
+    if (!email.trim() || password.length < 12) {
+      toast.error("Informe um e-mail e uma senha com pelo menos 12 caracteres");
       return;
     }
 
     setBusy(true);
-    const { data, error } = await supabase.auth.signUp({
+    const { data: registeredUser, error } = await authRequest<AuthUser>("/api/auth/register", {
       email: email.trim(),
       password,
-      options: { emailRedirectTo: `${window.location.origin}/entrar` },
+      profile: {
+        ...payload,
+        nick: payload.nick.trim(),
+        username: payload.username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
+        city: payload.city.trim(),
+        bio: payload.bio.trim(),
+      },
     });
+    if (error || !registeredUser) {
+      setBusy(false);
+      toast.error(error?.message || "Não foi possível criar a conta. Tente novamente.");
+      return;
+    }
+
+    let avatarError: unknown = null;
+    if (avatarFile) {
+      try {
+        await saveAvatar(registeredUser.id);
+      } catch (error) {
+        console.error("Conta criada, mas não foi possível salvar o avatar:", error);
+        avatarError = error;
+      }
+    }
+
+    window.dispatchEvent(new Event("cp:auth-changed"));
+    await refresh();
     setBusy(false);
-
-    if (error) {
+    if (avatarError) {
       toast.error(
-        error.message.includes("already registered")
-          ? "Este e-mail já tem conta. Faça login."
-          : "Não foi possível criar a conta. Tente novamente.",
+        avatarError instanceof Error
+          ? `Conta criada, mas a foto não foi salva: ${avatarError.message}. Você pode adicioná-la em Editar perfil.`
+          : "Conta criada, mas a foto não foi salva. Você pode adicioná-la em Editar perfil.",
       );
-      return;
-    }
-
-    savePendingProfile({
-      nick: nick.trim(),
-      username: username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
-      type,
-      city: city.trim(),
-      bio: bio.trim(),
-      hue: 300,
-      
-      lookingFor: lookingFor,
-      orientation,
-      
-    });
-
-    if (data.session) {
+    } else {
       toast.success("Conta criada");
-      navigate({ to: "/feed" });
-      return;
     }
-
-    toast.success("Confirme seu e-mail para ativar a conta");
-    navigate({ to: "/entrar" });
+    navigate({ to: "/feed" });
   };
 
 
@@ -218,27 +218,17 @@ function SignupPage() {
               className="mt-2 border-border bg-surface"
             />
           </div>
+          <ProfileAvatarPicker nick={nick} file={avatarFile} onFileChange={setAvatarFile} disabled={busy} />
 
           {!user && (
             <>
-              <button
-                type="button"
-                onClick={() => void signUpWithGoogle()}
-                disabled={busy}
-                className="w-full rounded-full border border-border bg-surface py-3.5 text-sm font-medium text-foreground hover:bg-surface-2 disabled:opacity-60"
-              >
-                Continuar com Google
-              </button>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                <span className="h-px flex-1 bg-border" /> ou <span className="h-px flex-1 bg-border" />
-              </div>
               <div>
                 <Label htmlFor="email" className="text-sm">E-mail</Label>
                 <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" className="mt-2 border-border bg-surface" />
               </div>
               <div>
                 <Label htmlFor="password" className="text-sm">Senha</Label>
-                <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" className="mt-2 border-border bg-surface" />
+                <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 12 caracteres" className="mt-2 border-border bg-surface" />
               </div>
             </>
           )}

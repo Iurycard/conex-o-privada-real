@@ -1,15 +1,17 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Camera, ShieldCheck } from "lucide-react";
-import { useState, type ChangeEvent } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+import { d1 } from "@/lib/d1-client";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { AvatarOrb } from "@/components/bits";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/profile-options";
+import { useAuth } from "@/hooks/use-auth";
+import { ProfileAvatarPicker } from "@/components/profile-avatar-picker";
+import { removeAlbumPhoto, resolveAlbumUrls, uploadAlbumPhotos } from "@/lib/album-storage";
 
 export const Route = createFileRoute("/_authenticated/editar-perfil")({
   head: () => ({
@@ -26,7 +28,9 @@ const genderOptions = ["Mulher", "Homem", "Não binário", "Casal"];
 
 function EditProfilePage() {
   const navigate = useNavigate();
-  const [avatar, setAvatar] = useState("");
+  const { user } = useAuth();
+  const [avatarPath, setAvatarPath] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [gender, setGender] = useState("");
   const [orientation, setOrientation] = useState("");
   const [nick, setNick] = useState("");
@@ -38,6 +42,7 @@ function EditProfilePage() {
   const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
   const [cidades, setCidades] = useState<{ id: number; nome: string }[]>([]); 
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
   const [bio, setBio] = useState("");
   const [lookingFor, setLookingFor] = useState<AccountType[]>([]);
 
@@ -61,13 +66,12 @@ useEffect(() => {
     .catch(() => {});
 }, [selectedUf]);
 
-// 3. Carrega os dados do perfil do Supabase e preenche os campos
+// Load the signed-in profile from D1.
 useEffect(() => {
   async function loadProfile() {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data } = await supabase
+    const { data } = await d1
       .from("profiles")
       .select("*")
       .eq("id", user.id)
@@ -81,7 +85,10 @@ useEffect(() => {
       setType((data.type as AccountType) || "");
       setBio(data.bio || "");
       setCity(data.city || "");
-      setAvatar(data.avatar || "");
+      const storedAvatar = typeof data.avatar === "string" ? data.avatar : "";
+      setAvatarPath(storedAvatar);
+      const [resolvedAvatar] = await resolveAlbumUrls(storedAvatar ? [storedAvatar] : [], user.id);
+      setAvatarUrl(resolvedAvatar ?? "");
       setLookingFor((data.looking_for as AccountType[]) || []);
 
       if (data.city && data.city.includes(" - ")) {
@@ -91,7 +98,7 @@ useEffect(() => {
     }
   }
   loadProfile();
-}, []);
+}, [user]);
 
   const toggleLooking = (option: AccountType) => {
     setLookingFor((selected) => selected.includes(option)
@@ -99,71 +106,68 @@ useEffect(() => {
       : [...selected, option]);
   };
 
-  const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setAvatarFile(file);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") setAvatar(reader.result);
-    };
-    reader.readAsDataURL(file);
-    event.target.value = "";
-  };
-
-
-
 const saveProfile = async () => {
   if (!nick.trim() || !username.trim()) {
     toast.error("Informe o nome do perfil e o usuário");
     return;
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     toast.error("Usuário não autenticado");
     return;
   }
 
-  let finalAvatarUrl = avatar;
-
-  // Se houver nova foto, faz o upload para o Storage
-  if (avatarFile) {
-    const fileExt = avatarFile.name.split(".").pop();
-    const filePath = `${user.id}/avatar.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(filePath, avatarFile, { upsert: true });
-
-    if (!uploadError) {
-      const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
-      finalAvatarUrl = data.publicUrl;
+  setSaving(true);
+  let uploadedAvatarPath: string | null = null;
+  let profileSaved = false;
+  try {
+    let finalAvatarPath = avatarPath;
+    if (avatarFile) {
+      const [path] = await uploadAlbumPhotos(user.id, "public", [avatarFile]);
+      if (!path) throw new Error("Não foi possível enviar a foto");
+      uploadedAvatarPath = path;
+      finalAvatarPath = path;
     }
-  }
 
-  // Atualiza no Supabase salvando apenas a cidade formatada ("Cidade - UF")
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      nick: nick.trim(),
-      username: username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
-      gender,
-      orientation,
-      type,
-      city,
-      bio: bio.trim(),
-      avatar: finalAvatarUrl,
-      looking_for: lookingFor,
-    })
-    .eq("id", user.id);
+    const { error } = await d1
+      .from("profiles")
+      .update({
+        nick: nick.trim(),
+        username: username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
+        gender,
+        orientation,
+        type,
+        city,
+        bio: bio.trim(),
+        avatar: finalAvatarPath || null,
+        looking_for: lookingFor,
+      })
+      .eq("id", user.id);
 
-  if (error) {
-    toast.error("Erro ao atualizar perfil");
-    console.error(error);
-  } else {
+    if (error) throw new Error(error.message || "Erro ao atualizar perfil");
+    profileSaved = true;
+
+    if (uploadedAvatarPath && avatarPath && avatarPath !== uploadedAvatarPath) {
+      try {
+        await removeAlbumPhoto(avatarPath);
+      } catch (error) {
+        console.error("Perfil atualizado, mas não foi possível remover o avatar anterior:", error);
+      }
+    }
     toast.success("Perfil atualizado com sucesso!");
     navigate({ to: "/perfil" });
+  } catch (error) {
+    if (uploadedAvatarPath && !profileSaved) {
+      try {
+        await removeAlbumPhoto(uploadedAvatarPath);
+      } catch (cleanupError) {
+        console.error("Não foi possível remover o avatar após falha ao salvar o perfil:", cleanupError);
+      }
+    }
+    console.error("Erro ao atualizar perfil:", error);
+    toast.error(error instanceof Error ? error.message : "Erro ao atualizar perfil");
+  } finally {
+    setSaving(false);
   }
 };
 
@@ -182,29 +186,7 @@ const saveProfile = async () => {
           Use um apelido. Sua identidade e seus dados pessoais permanecem protegidos.
         </div>
 
-        <section className="flex items-center gap-4 rounded-xl border border-border bg-surface p-4">
-          <div className="relative">
-            {avatar ? (
-              <img src={avatar} alt={`Imagem de perfil de ${nick}`} className="h-20 w-20 rounded-full object-cover" />
-            ) : (
-              <AvatarOrb 
-              profile={{ 
-                nick: nick || "usuário",
-                 avatar_url: avatar || "",
-                } as any} 
-                size={80} 
-                ring={false} />
-            )}
-            <label className="absolute bottom-0 right-0 grid h-8 w-8 cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground shadow-lg">
-              <Camera className="h-4 w-4" />
-              <input type="file" accept="image/*" className="sr-only" onChange={handleAvatarChange} />
-            </label>
-          </div>
-          <div>
-            <p className="text-sm font-semibold">Imagem de perfil</p>
-            <p className="mt-1 text-xs text-muted-foreground">Escolha uma foto que represente seu perfil.</p>
-          </div>
-        </section>
+        <ProfileAvatarPicker avatarUrl={avatarUrl} nick={nick} file={avatarFile} onFileChange={setAvatarFile} disabled={saving} />
 
         <section className="mt-6 space-y-5">
           <div>
@@ -351,8 +333,8 @@ const saveProfile = async () => {
           </div>
         </section>
 
-        <Button type="button" onClick={saveProfile} className="mt-8 h-12 w-full rounded-full bg-gradient-primary font-semibold text-primary-foreground shadow-neon hover:opacity-90">
-          Salvar alterações
+        <Button type="button" onClick={() => void saveProfile()} disabled={saving} className="mt-8 h-12 w-full rounded-full bg-gradient-primary font-semibold text-primary-foreground shadow-neon hover:opacity-90">
+          {saving ? "Salvando…" : "Salvar alterações"}
         </Button>
       </main>
     </div>

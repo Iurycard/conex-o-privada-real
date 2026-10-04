@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { d1 } from "@/lib/d1-client"
 import { useAuth } from "@/hooks/use-auth";
 
 export type FollowRow = { follower_id: string; following_id: string };
@@ -78,11 +78,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       return;
     }
     const [f, l, v, n, r] = await Promise.all([
-      supabase.from("follows").select("follower_id, following_id"),
-      supabase.from("profile_likes").select("liker_id, liked_id"),
-      supabase.from("profile_visits").select("visitor_id, profile_id, visited_at").order("visited_at", { ascending: false }),
-      supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50),
-      supabase.from("album_access_requests").select("*").order("created_at", { ascending: false }),
+      d1.from("follows").select("follower_id, following_id"),
+      d1.from("profile_likes").select("liker_id, liked_id"),
+      d1.from("profile_visits").select("visitor_id, profile_id, visited_at").order("visited_at", { ascending: false }),
+      d1.from("notifications").select("*").order("created_at", { ascending: false }).limit(50),
+      d1.from("album_access_requests").select("*").order("created_at", { ascending: false }),
     ]);
     setFollows((f.data ?? []) as FollowRow[]);
     setLikes((l.data ?? []) as LikeRow[]);
@@ -98,28 +98,14 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!uid) return;
-    const channel = supabase
-      .channel("social-notifications")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` },
-        () => void refresh(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "album_access_requests" },
-        () => void refresh(),
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    const interval = window.setInterval(() => void refresh(), 30_000);
+    return () => window.clearInterval(interval);
   }, [uid, refresh]);
 
   const notify = useCallback(
     async (targetId: string, type: string, body: string) => {
       if (!uid || targetId === uid) return;
-      await supabase.from("notifications").insert({ user_id: targetId, actor_id: uid, type, body });
+      await d1.from("notifications").insert({ user_id: targetId, actor_id: uid, type, body });
     },
     [uid],
   );
@@ -145,11 +131,11 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         if (!uid || id === uid) return;
         if (isFollowing(id)) {
           setFollows((list) => list.filter((f) => !(f.follower_id === uid && f.following_id === id)));
-          await supabase.from("follows").delete().eq("follower_id", uid).eq("following_id", id);
+          await d1.from("follows").delete().eq("follower_id", uid).eq("following_id", id);
           return;
         }
         setFollows((list) => [...list, { follower_id: uid, following_id: id }]);
-        await supabase.from("follows").insert({ follower_id: uid, following_id: id });
+        await d1.from("follows").insert({ follower_id: uid, following_id: id });
         await notify(id, "follow", `começou a seguir você`);
         void nick;
       },
@@ -159,18 +145,18 @@ export function SocialProvider({ children }: { children: ReactNode }) {
         if (!uid || id === uid) return false;
         if (hasLiked(id)) {
           setLikes((list) => list.filter((l) => !(l.liker_id === uid && l.liked_id === id)));
-          await supabase.from("profile_likes").delete().eq("liker_id", uid).eq("liked_id", id);
+          await d1.from("profile_likes").delete().eq("liker_id", uid).eq("liked_id", id);
           return false;
         }
         setLikes((list) => [...list, { liker_id: uid, liked_id: id }]);
-        await supabase.from("profile_likes").insert({ liker_id: uid, liked_id: id });
+        await d1.from("profile_likes").insert({ liker_id: uid, liked_id: id });
         await notify(id, "like", "curtiu o seu perfil");
         void nick;
         return true;
       },
       registerVisit: async (id) => {
         if (!uid || id === uid) return;
-        await supabase
+        await d1
           .from("profile_visits")
           .upsert({ visitor_id: uid, profile_id: id }, { onConflict: "visitor_id,profile_id", ignoreDuplicates: true });
         await notify(id, "visit", "visitou seu perfil");
@@ -180,7 +166,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       markNotificationsRead: async () => {
         if (!uid) return;
         setNotifications((list) => list.map((n) => ({ ...n, read: true })));
-        await supabase.from("notifications").update({ read: true }).eq("user_id", uid).eq("read", false);
+        await d1.from("notifications").update({ read: true }).eq("user_id", uid).eq("read", false);
       },
       albumAccess: (ownerId) => {
         if (!uid) return "none";
@@ -190,7 +176,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       },
       requestAlbumAccess: async (ownerId, nick) => {
         if (!uid || ownerId === uid) return;
-        const { data } = await supabase
+        const { data } = await d1
           .from("album_access_requests")
           .insert({ requester_id: uid, owner_id: ownerId })
           .select("*")
@@ -202,7 +188,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       respondAlbumRequest: async (requestId, status) => {
         const req = albumRequests.find((r) => r.id === requestId);
         setAlbumRequests((list) => list.map((r) => (r.id === requestId ? { ...r, status } : r)));
-        await supabase.from("album_access_requests").update({ status }).eq("id", requestId);
+        await d1.from("album_access_requests").update({ status }).eq("id", requestId);
         if (req) {
           await notify(
             req.requester_id,

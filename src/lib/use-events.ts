@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { d1 } from "@/lib/d1-client"
 import { useAuth } from "@/hooks/use-auth";
 
 export type EventRow = {
@@ -34,8 +34,8 @@ export function useEvents() {
 
   const refresh = useCallback(async () => {
     const [e, a] = await Promise.all([
-      supabase.from("events").select("*").order("created_at", { ascending: true }),
-      supabase.from("event_attendees").select("id, event_id, user_id, status"),
+      d1.from("events").select("*").order("created_at", { ascending: true }),
+      d1.from("event_attendees").select("id, event_id, user_id, status"),
     ]);
     setEvents((e.data ?? []) as EventRow[]);
     setAttendees((a.data ?? []) as AttendeeRow[]);
@@ -60,18 +60,18 @@ export function useEvents() {
     if (!user) return false;
     const existing = attendees.find((a) => a.event_id === eventId && a.user_id === user.id);
     if (existing && existing.status === next) {
-      const { error } = await supabase.from("event_attendees").delete().eq("id", existing.id);
+      const { error } = await d1.from("event_attendees").delete().eq("id", existing.id);
       if (error) return false;
       setAttendees((list) => list.filter((a) => a.id !== existing.id));
       return true;
     }
     if (existing) {
-      const { error } = await supabase.from("event_attendees").update({ status: next }).eq("id", existing.id);
+      const { error } = await d1.from("event_attendees").update({ status: next }).eq("id", existing.id);
       if (error) return false;
       setAttendees((list) => list.map((a) => (a.id === existing.id ? { ...a, status: next } : a)));
       return true;
     }
-    const { data, error } = await supabase
+    const { data, error } = await d1
       .from("event_attendees")
       .insert({ event_id: eventId, user_id: user.id, status: next })
       .select("id, event_id, user_id, status")

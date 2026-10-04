@@ -1,41 +1,17 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Mail, Lock } from "lucide-react";
+import { ArrowLeft, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
-import { useAuth } from "@/hooks/use-auth";
-import { useProfiles } from "@/context/profiles-context";
-import { readPendingProfile, clearPendingProfile } from "@/lib/pending-profile";
+import { authRequest } from "@/lib/d1-client";
+import { useAuth, type AuthUser } from "@/hooks/use-auth";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-const GOOGLE_OAUTH_STARTED_AT_KEY = "cp:google-oauth-started-at";
-const GOOGLE_OAUTH_MAX_AGE_MS = 5 * 60 * 1000;
-
-function markGoogleOAuthStarted() {
-  try {
-    sessionStorage.setItem(GOOGLE_OAUTH_STARTED_AT_KEY, String(Date.now()));
-  } catch {
-    // Storage may be unavailable in restricted browser contexts.
-  }
-}
-
-function consumeRecentGoogleOAuth() {
-  try {
-    const startedAt = Number(sessionStorage.getItem(GOOGLE_OAUTH_STARTED_AT_KEY));
-    sessionStorage.removeItem(GOOGLE_OAUTH_STARTED_AT_KEY);
-    return Number.isFinite(startedAt) && Date.now() - startedAt <= GOOGLE_OAUTH_MAX_AGE_MS;
-  } catch {
-    return false;
-  }
-}
 
 export const Route = createFileRoute("/entrar")({
   head: () => ({
     meta: [
       { title: "Entrar — Conexão Privada" },
-      { name: "description", content: "Acesse sua conta da Conexão Privada com e-mail e senha ou pelo Google." },
+      { name: "description", content: "Acesse sua conta da Conexão Privada com e-mail e senha." },
       { property: "og:title", content: "Entrar — Conexão Privada" },
       { property: "og:description", content: "Acesse sua conta discreta da Conexão Privada." },
       { property: "og:type", content: "website" },
@@ -47,46 +23,14 @@ export const Route = createFileRoute("/entrar")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { addProfile } = useProfiles();
+  const { user, refresh } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    const pending = readPendingProfile();
-    if (!pending) {
-      if (consumeRecentGoogleOAuth()) navigate({ to: "/feed", replace: true });
-      return;
-    }
-    consumeRecentGoogleOAuth();
-    setBusy(true);
-    void addProfile(pending)
-      .then(() => {
-        clearPendingProfile();
-        navigate({ to: "/feed" });
-      })
-      .catch((error) => console.error("Erro ao criar perfil do Google:", error))
-      .finally(() => setBusy(false));
-  }, [addProfile, navigate, user]);
-
-  const sendPasswordReset = async () => {
-    if (!email.trim()) {
-      toast.error("Informe seu e-mail para recuperar a senha");
-      return;
-    }
-    setBusy(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/redefinir-senha`,
-    });
-    setBusy(false);
-    if (error) {
-      toast.error("Não foi possível enviar o e-mail de recuperação");
-      return;
-    }
-    toast.success("Enviamos um link para redefinir sua senha");
-  };
+    if (user) navigate({ to: "/feed", replace: true });
+  }, [navigate, user]);
 
   const signIn = async () => {
     if (!email.trim() || !password) {
@@ -94,55 +38,22 @@ function LoginPage() {
       return;
     }
     setBusy(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await authRequest<AuthUser>("/api/auth/login", {
       email: email.trim(),
       password,
     });
     setBusy(false);
-
     if (error) {
-      toast.error(
-        error.message.includes("Invalid login")
-          ? "E-mail ou senha incorretos"
-          : "Não foi possível entrar. Tente novamente."
-      );
+      toast.error(error.message || "Não foi possível entrar. Tente novamente.");
       return;
     }
-
-    // Processa perfil pendente retido no cadastro local
-    const pending = readPendingProfile();
-    if (pending && data.user) {
-      try {
-        await addProfile(pending);
-        clearPendingProfile();
-      } catch (err) {
-        console.error("Erro ao criar perfil pendente:", err);
-      }
-    }
-
+    window.dispatchEvent(new Event("cp:auth-changed"));
+    await refresh();
     toast.success("Bem-vindo de volta");
     navigate({ to: "/feed" });
   };
 
-  const signInWithGoogle = async () => {
-    markGoogleOAuthStarted();
-    try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: `${window.location.origin}/entrar`,
-      });
-      if (result.error) {
-        consumeRecentGoogleOAuth();
-        toast.error("Não foi possível entrar com o Google");
-        return;
-      }
-      if (result.redirected) return;
-      consumeRecentGoogleOAuth();
-      navigate({ to: "/feed" });
-    } catch {
-      consumeRecentGoogleOAuth();
-      toast.error("Não foi possível entrar com o Google");
-    }
-  };
+  const sendPasswordReset = () => toast.error("A recuperação exige configurar um provedor de e-mail");
 
   return (
     <div className="min-h-screen bg-background">
@@ -154,85 +65,32 @@ function LoginPage() {
       </header>
 
       <main className="mx-auto w-full max-w-sm px-5 pb-16 pt-10">
-        <h2 className="text-2xl font-semibold">
-           <span className="text-gradient-gold">Bem-vindo de volta</span>
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Acesse sua conta para ver o feed, eventos e conversas.
-        </p>
-
+        <h2 className="text-2xl font-semibold"><span className="text-gradient-gold">Bem-vindo de volta</span></h2>
+        <p className="mt-2 text-sm text-muted-foreground">Acesse sua conta para ver o feed, eventos e conversas.</p>
         <div className="mt-8 space-y-4">
           <div>
-            <Label htmlFor="email" className="text-sm">
-              E-mail
-            </Label>
+            <Label htmlFor="email" className="text-sm">E-mail</Label>
             <div className="relative mt-2">
               <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="voce@email.com"
-                className="border-border bg-surface pl-9"
-              />
+              <Input id="email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="voce@email.com" className="border-border bg-surface pl-9" />
             </div>
           </div>
-
           <div>
-            <Label htmlFor="password" className="text-sm">
-              Senha
-            </Label>
+            <Label htmlFor="password" className="text-sm">Senha</Label>
             <div className="relative mt-2">
               <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && void signIn()}
-                placeholder="••••••••"
-                className="border-border bg-surface pl-9"
-              />
+              <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void signIn()} placeholder="••••••••" className="border-border bg-surface pl-9" />
             </div>
           </div>
         </div>
-
-        <button
-          onClick={() => void signIn()}
-          disabled={busy}
-          className="mt-7 w-full rounded-full bg-gradient-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-neon disabled:opacity-60"
-        >
+        <button type="button" onClick={() => void signIn()} disabled={busy} className="mt-7 w-full rounded-full bg-gradient-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-neon disabled:opacity-60">
           {busy ? "Entrando…" : "Entrar"}
         </button>
-
-        <button
-          type="button"
-          onClick={() => void sendPasswordReset()}
-          disabled={busy}
-          className="mt-3 w-full text-center text-xs font-medium text-primary-glow hover:underline disabled:opacity-60"
-        >
+        <button type="button" onClick={sendPasswordReset} className="mt-3 w-full text-center text-xs font-medium text-primary-glow hover:underline">
           Esqueci minha senha
         </button>
-
-        <div className="my-6 flex items-center gap-3 text-[11px] text-muted-foreground">
-          <span className="h-px flex-1 bg-border" /> ou <span className="h-px flex-1 bg-border" />
-        </div>
-
-        <button
-          onClick={() => void signInWithGoogle()}
-          className="w-full rounded-full border border-border bg-surface py-3.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-2"
-        >
-          Continuar com Google
-        </button>
-
         <p className="mt-8 text-center text-sm text-muted-foreground">
-          Ainda não tem conta?{" "}
-          <Link to="/cadastro" className="font-semibold text-primary-glow">
-            Criar perfil discreto
-          </Link>
+          Ainda não tem conta? <Link to="/cadastro" className="font-semibold text-primary-glow">Criar perfil discreto</Link>
         </p>
       </main>
     </div>

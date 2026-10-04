@@ -29,6 +29,8 @@ function ageFrom(birthDate: string | null): number {
 }
 
 export function rowToProfile(row: ProfileRow) {
+  const mediaUrl = (path: string | null) =>
+    path?.includes("/r2/") ? `/api/media?key=${encodeURIComponent(path)}` : path ?? "";
 
   return {
     id: row.id,
@@ -46,8 +48,8 @@ export function rowToProfile(row: ProfileRow) {
     ...(row.birth_date ? { birthDate: row.birth_date } : {}),
     ...(typeof row.latitude === "number" ? { latitude: row.latitude } : {}),
     ...(typeof row.longitude === "number" ? { longitude: row.longitude } : {}),
-    avatar: row.avatar ?? "",
-    cover: row.cover ?? "",
+    avatar: mediaUrl(row.avatar),
+    cover: mediaUrl(row.cover),
     lookingFor: (row.looking_for ?? []) as AccountType[],
     publicAlbum: row.public_album ?? [],
     privateAlbum: row.private_album ?? [],
