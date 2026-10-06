@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Flag, Heart, MessageSquare, MoreHorizontal, Trash2, UserRound, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { AvatarOrb, MediaBlock, VipBadge } from "@/components/bits";
 import { ReportDialog, type ReportTarget } from "@/components/report-dialog";
@@ -446,78 +446,123 @@ function FeedPhotoLightbox({
   onOpenComments: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [imageOnly, setImageOnly] = useState(false);
+  const thumbnailClickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const photoUrls = useAlbumUrls(post.image ? [post.image] : [], `${author.id}/public`);
 
+  useEffect(() => () => {
+    if (thumbnailClickTimeout.current) clearTimeout(thumbnailClickTimeout.current);
+  }, []);
+
+  const handleThumbnailClick = () => {
+    if (thumbnailClickTimeout.current) {
+      clearTimeout(thumbnailClickTimeout.current);
+      thumbnailClickTimeout.current = null;
+      setImageOnly(true);
+      setOpen(true);
+      return;
+    }
+    thumbnailClickTimeout.current = setTimeout(() => {
+      thumbnailClickTimeout.current = null;
+      setOpen(true);
+    }, 250);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <button type="button" className="relative block w-full text-left">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setImageOnly(false);
+      }}
+    >
+      <button
+        type="button"
+        onClick={handleThumbnailClick}
+        onDoubleClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        title="Clique para ampliar; duplo clique para ver somente a imagem"
+        aria-label={`Ver foto de ${author.nick}`}
+        className="relative block w-full text-left"
+      >
           <MediaBlock
             hue={author.hue}
             src={photoUrls[0] ?? null}
             alt={`Ilustração do post de ${author.nick}`}
             className="aspect-[4/3] w-full"
           />
-        </button>
-      </DialogTrigger>
-      <DialogContent className="!left-0 !top-0 !translate-x-0 !translate-y-0 inset-0 flex h-[100dvh] w-screen max-w-none flex-col gap-0 rounded-none border-0 bg-black p-0 text-white [&>button:last-child]:hidden">
-        <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-white/10 bg-black/90 px-4">
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-            aria-label="Fechar publicação"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          <AvatarOrb profile={author} size={36} profileId={author.id} clickable />
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false);
-              onOpenOptions();
-            }}
-            className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-            aria-label={`Mais opções da postagem de ${author.nick}`}
-          >
-            <MoreHorizontal className="h-5 w-5" />
-          </button>
-        </header>
+      </button>
+      <DialogContent className="!fixed !inset-0 !left-0 !top-0 !translate-x-0 !translate-y-0 flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 bg-black p-0 text-white [&>button:last-child]:hidden">
+        {!imageOnly && (
+          <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between bg-gradient-to-b from-black/60 to-transparent px-4 pb-3 pt-[calc(env(safe-area-inset-top)+1rem)]">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="grid h-10 w-10 place-items-center rounded-full bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/55"
+              aria-label="Fechar publicação"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <AvatarOrb profile={author} size={36} profileId={author.id} clickable />
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onOpenOptions();
+              }}
+              className="grid h-10 w-10 place-items-center rounded-full bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/55"
+              aria-label={`Mais opções da postagem de ${author.nick}`}
+            >
+              <MoreHorizontal className="h-5 w-5" />
+            </button>
+          </header>
+        )}
 
-        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-3 sm:p-6">
-          <div className="relative flex max-h-full max-w-full items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black">
+          {photoUrls[0] ? (
+            <img
+              src={photoUrls[0]}
+              alt={`Foto de ${author.nick}`}
+              title={imageOnly ? "Duplo clique para mostrar os controles" : "Duplo clique para ver somente a imagem"}
+              onDoubleClick={() => setImageOnly((current) => !current)}
+              className="h-full w-full object-contain"
+            />
+          ) : (
             <MediaBlock
               hue={author.hue}
-              src={photoUrls[0] ?? null}
               alt={`Foto de ${author.nick}`}
-              className="h-[min(70vw,calc(100dvh-9rem))] w-[min(70vw,calc(100dvh-9rem))] max-w-full rounded-lg sm:rounded-xl"
+              className="h-full w-full"
             />
-          </div>
+          )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-5 border-t border-white/10 bg-black/90 px-5 py-4">
-          <button
-            type="button"
-            onClick={onLike}
-            className="inline-flex items-center gap-2 text-sm text-white transition-colors hover:text-primary-glow"
-            aria-label={`Curtir publicação de ${author.nick}`}
-          >
-            <Heart className={`h-5 w-5 ${isLiked ? "fill-primary-glow text-primary-glow" : ""}`} />
-            <span>{post.likes}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false);
-              onOpenComments();
-            }}
-            className="inline-flex items-center gap-2 text-sm text-white transition-colors hover:text-primary-glow"
-            aria-label={`Abrir comentários da publicação de ${author.nick}`}
-          >
-            <MessageSquare className="h-5 w-5" />
-            <span>{post.comments}</span>
-          </button>
-        </div>
+        {!imageOnly && (
+          <div className="absolute inset-x-0 bottom-0 z-20 flex items-center gap-5 bg-gradient-to-t from-black/60 to-transparent px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-10">
+            <button
+              type="button"
+              onClick={onLike}
+              className="inline-flex items-center gap-2 text-sm text-white transition-colors hover:text-primary-glow"
+              aria-label={`Curtir publicação de ${author.nick}`}
+            >
+              <Heart className={`h-5 w-5 ${isLiked ? "fill-primary-glow text-primary-glow" : ""}`} />
+              <span>{post.likes}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onOpenComments();
+              }}
+              className="inline-flex items-center gap-2 text-sm text-white transition-colors hover:text-primary-glow"
+              aria-label={`Abrir comentários da publicação de ${author.nick}`}
+            >
+              <MessageSquare className="h-5 w-5" />
+              <span>{post.comments}</span>
+            </button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useVip } from "@/context/vip";
 import { useProfiles } from "@/context/profiles-context";
 import { useSocial } from "@/hooks/use-social";
+import { useUnreadMessages } from "@/hooks/use-unread-messages";
 import { Textarea } from "@/components/ui/textarea";
 import logoimg from "@/assets/logo.png";
 import {
@@ -272,6 +273,7 @@ function Logo() {
 export function AppShell({ children }: { children: ReactNode }) {
   const { isVip, openVipModal } = useVip();
   const { unreadCount } = useSocial();
+  const { unreadMessageCount } = useUnreadMessages();
 
   return (
     <div className="min-h-screen bg-background">
@@ -317,6 +319,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
+                {to === "/chat" && unreadMessageCount > 0 && (
+                  <span
+                    aria-label={`${unreadMessageCount} mensagens não lidas`}
+                    className="absolute -right-2 -top-2 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground"
+                  >
+                    {unreadMessageCount > 9 ? "9+" : unreadMessageCount}
+                  </span>
+                )}
               </span>
               <span>{label}</span>
             </Link>
@@ -352,6 +362,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {to === "/notificacoes" && unreadCount > 0 && (
                   <span className="absolute -right-2 -top-2 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
                     {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+                {to === "/chat" && unreadMessageCount > 0 && (
+                  <span
+                    aria-label={`${unreadMessageCount} mensagens não lidas`}
+                    className="absolute -right-2 -top-2 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground"
+                  >
+                    {unreadMessageCount > 9 ? "9+" : unreadMessageCount}
                   </span>
                 )}
               </span>

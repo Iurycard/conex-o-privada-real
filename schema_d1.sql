@@ -137,6 +137,25 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages (conversation_id, created_at);
 
+CREATE TABLE IF NOT EXISTS conversation_read_states (
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  last_read_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (conversation_id, user_id)
+);
+
+INSERT OR IGNORE INTO conversation_read_states (conversation_id, user_id, last_read_at)
+SELECT c.id, c.user_a, COALESCE(MAX(m.created_at), '1970-01-01 00:00:00')
+FROM conversations c
+LEFT JOIN messages m ON m.conversation_id = c.id
+GROUP BY c.id;
+
+INSERT OR IGNORE INTO conversation_read_states (conversation_id, user_id, last_read_at)
+SELECT c.id, c.user_b, COALESCE(MAX(m.created_at), '1970-01-01 00:00:00')
+FROM conversations c
+LEFT JOIN messages m ON m.conversation_id = c.id
+GROUP BY c.id;
+
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,

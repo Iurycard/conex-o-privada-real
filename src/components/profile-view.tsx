@@ -113,6 +113,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [lightbox, setLightbox] = useState<{ album: "public" | "private"; index: number } | null>(null);
+  const [lightboxImageOnly, setLightboxImageOnly] = useState(false);
   const [connectionsView, setConnectionsView] = useState<"following" | "followers" | null>(null);
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
   const [selectedPostComments, setSelectedPostComments] = useState<PostComment[]>([]);
@@ -696,14 +697,25 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
         </Tabs>
       </div>
 
-      <Dialog open={lightbox !== null} onOpenChange={(o) => !o && setLightbox(null)}>
+      <Dialog
+        open={lightbox !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLightbox(null);
+            setLightboxImageOnly(false);
+          }
+        }}
+      >
         <DialogContent className="!fixed !inset-0 !left-0 !top-0 !translate-x-0 !translate-y-0 flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 bg-black p-0 text-white [&>button:last-child]:hidden">
           {lightboxPhotoExists && lightbox !== null && (
             <>
-              <header className="absolute inset-x-0 top-0 z-20 flex shrink-0 items-center justify-between bg-gradient-to-b from-black/60 to-transparent px-4 pb-3 pt-[calc(env(safe-area-inset-top)+1rem)]">
+              {!lightboxImageOnly && <header className="absolute inset-x-0 top-0 z-20 flex shrink-0 items-center justify-between bg-gradient-to-b from-black/60 to-transparent px-4 pb-3 pt-[calc(env(safe-area-inset-top)+1rem)]">
                 <button
                   type="button"
-                  onClick={() => setLightbox(null)}
+                  onClick={() => {
+                    setLightbox(null);
+                    setLightboxImageOnly(false);
+                  }}
                   className="grid h-10 w-10 place-items-center rounded-full bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/55"
                   aria-label="Fechar publicação"
                 >
@@ -736,7 +748,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu> : <span className="h-10 w-10" />}
-              </header>
+              </header>}
 
               <div
                 className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black"
@@ -756,6 +768,8 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                     <img
                       src={(lightbox.album === "private" ? privateUrls[lightbox.index] : publicUrls[lightbox.index]) ?? undefined}
                       alt={`${lightbox.album === "private" ? "Foto privada" : "Foto"} ${lightbox.index + 1} de ${profile.nick}`}
+                      title={lightboxImageOnly ? "Duplo clique para mostrar os controles" : "Duplo clique para ver somente a imagem"}
+                      onDoubleClick={() => setLightboxImageOnly((current) => !current)}
                       className="h-full w-full object-contain"
                     />
                   ) : (
@@ -764,7 +778,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                       className="h-full w-full"
                     />
                   )}
-                  {lightboxPhotoCount > 1 && (
+                  {!lightboxImageOnly && lightboxPhotoCount > 1 && (
                     <>
                       <button
                         type="button"
@@ -787,7 +801,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 </div>
               </div>
 
-              {lightbox.album === "public" ? <div className="absolute inset-x-0 bottom-0 z-20 flex items-center gap-5 bg-gradient-to-t from-black/60 to-transparent px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-10">
+              {!lightboxImageOnly && (lightbox.album === "public" ? <div className="absolute inset-x-0 bottom-0 z-20 flex items-center gap-5 bg-gradient-to-t from-black/60 to-transparent px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-10">
                 <button
                   type="button"
                   onClick={() => {
@@ -811,7 +825,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
                 </button>
               </div> : <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/60 to-transparent px-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-10 text-center text-sm text-white">
                 Foto {lightbox.index + 1} de {privatePhotos.length}
-              </div>}
+              </div>)}
             </>
           )}
         </DialogContent>

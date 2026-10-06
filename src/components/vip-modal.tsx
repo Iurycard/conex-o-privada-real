@@ -1,4 +1,5 @@
 import { Crown, Check, QrCode, Copy } from "lucide-react";
+import { useState } from "react";
 import { useVip } from "@/context/vip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -21,12 +22,36 @@ const plans = [
 
 export function VipModal() {
   const { vipModalOpen, closeVipModal, setVip } = useVip();
+  const [activating, setActivating] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"pix" | "card">("pix");
+
+  const handleActivatePrototypeVip = async () => {
+    setActivating(true);
+    try {
+      const response = await fetch("/api/vip/activate", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const payload = await response.json() as { error?: string; data?: { vip?: boolean }; simulated?: boolean };
+      if (!response.ok || !payload.data?.vip || !payload.simulated) {
+        throw new Error(payload.error ?? "Não foi possível ativar o VIP de teste");
+      }
+      setVip(true);
+      closeVipModal();
+      toast.success("VIP de teste ativado. Nenhum pagamento real foi processado.");
+    } catch (error) {
+      console.error("Erro ao ativar VIP de teste:", error);
+      toast.error(error instanceof Error ? error.message : "Não foi possível ativar o VIP de teste");
+    } finally {
+      setActivating(false);
+    }
+  };
 
   return (
     <Dialog open={vipModalOpen} onOpenChange={(o) => !o && closeVipModal()}>
-      <DialogContent className="max-w-md border-gold/40 bg-surface p-0 overflow-hidden">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] !w-[calc(100%-1rem)] max-w-md overflow-y-auto overscroll-contain border-gold/40 bg-surface p-0 sm:max-h-[calc(100dvh-2rem)]">
         <div className="h-1 w-full bg-gradient-gold" />
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <DialogHeader>
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-gold shadow-gold">
               <Crown className="h-5 w-5 text-gold-foreground" />
@@ -61,6 +86,30 @@ export function VipModal() {
             ))}
           </div>
 
+          <div className="mt-5 grid grid-cols-2 gap-2" aria-label="Forma de pagamento">
+            <button
+              type="button"
+              aria-pressed={paymentMethod === "pix"}
+              onClick={() => setPaymentMethod("pix")}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                paymentMethod === "pix" ? "border-gold bg-gold/10 text-gold" : "border-border text-muted-foreground hover:bg-surface-2"
+              }`}
+            >
+              Pix
+            </button>
+            <button
+              type="button"
+              aria-pressed={paymentMethod === "card"}
+              onClick={() => setPaymentMethod("card")}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                paymentMethod === "card" ? "border-gold bg-gold/10 text-gold" : "border-border text-muted-foreground hover:bg-surface-2"
+              }`}
+            >
+              Cartão de crédito
+            </button>
+          </div>
+
+          {paymentMethod === "pix" ? (
           <div className="mt-5 rounded-xl border border-gold/30 bg-surface-2 p-4">
             <div className="flex items-center gap-3">
               <div className="grid h-16 w-16 place-items-center rounded-lg bg-gradient-gold">
@@ -81,16 +130,55 @@ export function VipModal() {
               </div>
             </div>
           </div>
+          ) : (
+            <fieldset className="mt-5 space-y-3 rounded-xl border border-gold/30 bg-surface-2 p-4" disabled>
+              <legend className="px-1 text-sm font-medium">Cartão de crédito — demonstração</legend>
+              <label className="block space-y-1 text-xs text-muted-foreground">
+                Número do cartão
+                <input
+                  disabled
+                  placeholder="Disponível após integração de pagamento"
+                  className="w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+                />
+              </label>
+              <label className="block space-y-1 text-xs text-muted-foreground">
+                Nome impresso no cartão
+                <input
+                  disabled
+                  placeholder="Checkout ainda não conectado"
+                  className="w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1 text-xs text-muted-foreground">
+                  Validade
+                  <input
+                    disabled
+                    placeholder="MM/AA"
+                    className="w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+                  />
+                </label>
+                <label className="block space-y-1 text-xs text-muted-foreground">
+                  CVV
+                  <input
+                    disabled
+                    placeholder="•••"
+                    className="w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Demonstração: não informe dados reais. O cartão não é processado nem armazenado.
+              </p>
+            </fieldset>
+          )}
 
           <Button
             className="mt-5 w-full bg-gradient-gold font-semibold text-gold-foreground hover:opacity-90"
-            onClick={() => {
-              setVip(true);
-              closeVipModal();
-              toast.success("Pagamento simulado confirmado — você agora é VIP 👑");
-            }}
+            onClick={() => void handleActivatePrototypeVip()}
+            disabled={activating}
           >
-            Já paguei — ativar VIP
+            {activating ? "Ativando VIP de teste..." : "Já paguei — ativar VIP"}
           </Button>
           <p className="mt-2 text-center text-[11px] text-muted-foreground">
             Protótipo visual: nenhum pagamento real é processado.

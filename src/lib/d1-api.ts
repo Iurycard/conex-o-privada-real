@@ -315,11 +315,13 @@ type DataQuery = {
 };
 
 function dbValue(column: string, value: unknown): D1Value {
-  if (value === null || typeof value === "string" || typeof value === "number") {
-    if (JSON_COLUMNS.has(column) && typeof value !== "string") return JSON.stringify(value);
-    if (BOOLEAN_COLUMNS.has(column) && typeof value === "boolean") return value ? 1 : 0;
-    return value;
+  if (value === null) return null;
+  if (JSON_COLUMNS.has(column) && typeof value !== "string") {
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) throw new ApiError(400, `Invalid value for ${column}`);
+    return encoded;
   }
+  if (typeof value === "string" || typeof value === "number") return value;
   if (typeof value === "boolean") return value ? 1 : 0;
   throw new ApiError(400, `Invalid value for ${column}`);
 }
@@ -334,7 +336,7 @@ function decodeRow(row: D1Row): D1Row {
   for (const column of BOOLEAN_COLUMNS) {
     if (column in result) result[column] = Boolean(result[column]);
   }
-  for (const column of ["avatar", "cover", "image"]) {
+  for (const column of ["avatar", "cover"]) {
     const path = result[column];
     if (typeof path === "string" && path.includes("/r2/")) {
       result[column] = `/api/media?key=${encodeURIComponent(path)}`;
@@ -483,15 +485,27 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
         if (!profile?.vip) throw new ApiError(403, "Only VIP members can start conversations");
       }
       if (table === "messages") {
-        const conversation = await db.prepare("SELECT 1 AS allowed FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1")
-          .bind(String(row["conversation_id"] ?? ""), user.id, user.id).first();
+        row["created_at"] = new Date().toISOString();
+        const conversation = await db.prepare("SELECT user_a, user_b FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1")
+          .bind(String(row["conversation_id"] ?? ""), user.id, user.id).first<{ user_a: string; user_b: string }>();
         if (!conversation || row["sender_id"] !== user.id) throw new ApiError(403, "Not a participant in this conversation");
+        const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
+        if (!profile) throw new ApiError(403, "Profile not found");
+        if (!profile.vip) {
+          if (conversation.user_b !== user.id) throw new ApiError(403, "Only the VIP conversation starter can initiate messages");
+          const vipStarterMessage = await db.prepare(
+            "SELECT 1 AS allowed FROM messages WHERE conversation_id = ? AND sender_id = ? LIMIT 1",
+          ).bind(String(row["conversation_id"]), conversation.user_a).first();
+          if (!vipStarterMessage) throw new ApiError(403, "Wait for the VIP member to start the conversation");
+        }
       }
       if (table === "album_access_requests") {
         const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
         if (!profile?.vip) throw new ApiError(403, "Only VIP members can request private album access");
       }
       if (table === "message_attachments") {
+        const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
+        if (!profile?.vip) throw new ApiError(403, "Only VIP members can send private photo attachments");
         const message = await db.prepare("SELECT 1 AS allowed FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.id = ? AND m.sender_id = ? AND (c.user_a = ? OR c.user_b = ?) LIMIT 1")
           .bind(String(row["message_id"] ?? ""), user.id, user.id, user.id).first();
         if (!message || typeof row["storage_path"] !== "string" || !validMediaKey(row["storage_path"])) {
@@ -597,9 +611,10 @@ async function mediaHandler(request: Request, db: D1Database, env: WorkerEnv, us
       return json({ deleted: true });
     }
     const contentType = request.headers.get("content-type") ?? "";
-    const contentLength = Number(request.headers.get("content-length") ?? 0);
-    if (contentType !== "image/webp" || contentLength > 100 * 1024 * 1024) throw new ApiError(400, "Unsupported media type or size");
-    await bucket.put(key, request.body ?? new ArrayBuffer(0), { httpMetadata: { contentType, cacheControl: "private, max-age=3300" } });
+    if (contentType !== "image/webp") throw new ApiError(400, "Unsupported media type");
+    const body = await request.arrayBuffer();
+    if (body.byteLength > 100 * 1024 * 1024) throw new ApiError(400, "Image is too large");
+    await bucket.put(key, body, { httpMetadata: { contentType, cacheControl: "private, max-age=3300" } });
     return json({ key });
   }
   if (request.method !== "GET") throw new ApiError(405, "Method not allowed");
@@ -618,7 +633,63 @@ async function mediaHandler(request: Request, db: D1Database, env: WorkerEnv, us
   headers.set("cache-control", kind === "private" ? "private, no-store" : "private, max-age=300");
   headers.set("vary", "Cookie");
   headers.set("x-content-type-options", "nosniff");
-  return new Response(object.body, { headers });
+  const body = await new Response(object.body).arrayBuffer();
+  headers.set("content-length", String(body.byteLength));
+  return new Response(body, { headers });
+}
+
+async function activatePrototypeVip(request: Request, db: D1Database, user: AuthUser) {
+  if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+  assertSameOrigin(request);
+  const profile = await db.prepare(
+    "UPDATE profiles SET vip = 1, updated_at = ? WHERE id = ? RETURNING id, vip",
+  ).bind(new Date().toISOString(), user.id).first<{ id: string; vip: number }>();
+  if (!profile) throw new ApiError(404, "Profile not found");
+  return json({ data: decodeRow(profile), simulated: true });
+}
+
+async function chatUnreadHandler(request: Request, db: D1Database, user: AuthUser, path: string) {
+  if (path === "/api/chat/unread") {
+    if (request.method !== "GET") throw new ApiError(405, "Method not allowed");
+    const unread = await db.prepare(
+      `SELECT c.id AS conversation_id, COUNT(m.id) AS unread_count
+       FROM conversations c
+       LEFT JOIN conversation_read_states r
+         ON r.conversation_id = c.id AND r.user_id = ?
+       JOIN messages m
+         ON m.conversation_id = c.id
+        AND m.sender_id <> ?
+        AND julianday(m.created_at) > julianday(COALESCE(r.last_read_at, '1970-01-01 00:00:00'))
+       WHERE c.user_a = ? OR c.user_b = ?
+       GROUP BY c.id`,
+    ).bind(user.id, user.id, user.id, user.id).all<{ conversation_id: string; unread_count: number }>();
+    const conversations = unread.results ?? [];
+    return json({
+      conversations,
+      total: conversations.reduce((total, conversation) => total + conversation.unread_count, 0),
+    });
+  }
+
+  if (path === "/api/chat/read") {
+    if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+    assertSameOrigin(request);
+    const body = await readJson(request);
+    const conversationId = typeof body["conversation_id"] === "string" ? body["conversation_id"] : "";
+    if (!conversationId) throw new ApiError(400, "Conversation ID is required");
+    const conversation = await db.prepare(
+      "SELECT 1 AS allowed FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1",
+    ).bind(conversationId, user.id, user.id).first();
+    if (!conversation) throw new ApiError(403, "Not a participant in this conversation");
+    await db.prepare(
+      `INSERT INTO conversation_read_states (conversation_id, user_id, last_read_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT (conversation_id, user_id)
+       DO UPDATE SET last_read_at = excluded.last_read_at`,
+    ).bind(conversationId, user.id, new Date().toISOString()).run();
+    return json({ conversation_id: conversationId, read: true });
+  }
+
+  throw new ApiError(404, "Not found");
 }
 
 export async function handleWorkerApi(request: Request, rawEnv: unknown) {
@@ -630,6 +701,10 @@ export async function handleWorkerApi(request: Request, rawEnv: unknown) {
     if (path.startsWith("/api/auth/")) return await authHandler(request, db, path);
     const user = await getUser(request, db);
     if (!user) throw new ApiError(401, "Authentication required");
+    if (path === "/api/chat/unread" || path === "/api/chat/read") {
+      return await chatUnreadHandler(request, db, user, path);
+    }
+    if (path === "/api/vip/activate") return await activatePrototypeVip(request, db, user);
     if (path === "/api/data") return await dataHandler(request, db, user);
     if (path === "/api/media") return await mediaHandler(request, db, env, user);
     return json({ error: "Not found" }, 404);

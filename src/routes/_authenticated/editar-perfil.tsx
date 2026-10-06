@@ -77,7 +77,7 @@ useEffect(() => {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (data) {
+    if (data && !Array.isArray(data)) {
       setNick(data.nick || "");
       setUsername(data.username || "");
       setGender(data.gender || "");

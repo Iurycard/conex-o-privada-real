@@ -53,12 +53,25 @@ export async function uploadAlbumPhotos(
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
     const contentType = preparedFile.type || "application/octet-stream";
     const key = `${userId}/${kind}/r2/${filename}`;
-    const response = await fetch(`/api/media?key=${encodeURIComponent(key)}`, {
-        method: "PUT",
-        headers: { "content-type": contentType },
-        body: preparedFile,
-        credentials: "same-origin",
-      });
+    let response: Response | undefined;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        response = await fetch(`/api/media?key=${encodeURIComponent(key)}`, {
+          method: "PUT",
+          headers: { "content-type": contentType },
+          body: preparedFile,
+          credentials: "same-origin",
+        });
+        break;
+      } catch (error) {
+        if (!(error instanceof TypeError) || attempt === 2) {
+          console.error("Falha de conexão ao enviar foto:", error);
+          throw new Error("A conexão com o servidor foi interrompida. Tente enviar a foto novamente.");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+      }
+    }
+    if (!response) throw new Error("Não foi possível enviar a foto");
     if (!response.ok) throw new Error(`Falha no upload R2 (${response.status})`);
     paths.push(key);
   }
@@ -76,6 +89,7 @@ export async function resolveAlbumUrls(paths: string[], legacyPrefix?: string): 
   return paths.map((path) => {
     if (!path) return null;
     if (path.startsWith("http") || path.startsWith("data:")) return path;
+    if (path.startsWith("/api/media?")) return path;
     if (isR2Path(path)) return `/api/media?key=${encodeURIComponent(path)}`;
     if (legacyPrefix && !path.includes("/")) {
       const migratedPath = `${legacyPrefix}/r2/${path}`;

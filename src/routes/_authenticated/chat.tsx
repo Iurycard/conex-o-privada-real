@@ -8,6 +8,7 @@ import { useVip } from "@/context/vip";
 import { useAlbumUrls } from "@/lib/album-storage";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { useUnreadMessages } from "@/hooks/use-unread-messages";
 
 export const Route = createFileRoute("/_authenticated/chat")({
   head: () => ({
@@ -98,6 +99,7 @@ function ChatPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [partners, setPartners] = useState<ChatPartner[]>([]);
   const [conversationPartnerIds, setConversationPartnerIds] = useState<string[]>([]);
+  const [conversationIdsByPartner, setConversationIdsByPartner] = useState<Record<string, string>>({});
   const [conversationPreviews, setConversationPreviews] = useState<Record<string, string>>({});
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -108,8 +110,10 @@ function ChatPage() {
   const [privatePhotoPickerOpen, setPrivatePhotoPickerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeConversationStartedByVip, setActiveConversationStartedByVip] = useState(false);
   const { isVip, openVipModal } = useVip();
   const { user } = useAuth();
+  const { unreadByConversation, markConversationRead } = useUnreadMessages();
 
   const openPrivatePhotoPicker = async () => {
     if (!user) return;
@@ -161,6 +165,12 @@ function ChatPage() {
         conversation.user_a === user.id ? conversation.user_b : conversation.user_a,
       );
       setConversationPartnerIds(partnerIds);
+      setConversationIdsByPartner(Object.fromEntries(
+        (conversations ?? []).map((conversation) => [
+          conversation.user_a === user.id ? conversation.user_b : conversation.user_a,
+          conversation.id,
+        ]),
+      ));
       if (!conversations?.length) return;
 
       const partnerByConversation = new Map<string, string>();
@@ -191,39 +201,74 @@ function ChatPage() {
   }, [user]);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadConversationAndMessages() {
       if (!currentUserId || !activePartnerId) return;
+      setActiveConversationId(null);
+      setActiveConversationStartedByVip(false);
+      setMessages([]);
       if (!isVip && !conversationPartnerIds.includes(activePartnerId)) {
         setActivePartnerId(null);
         openVipModal();
         return;
       }
 
-      const { data: conversations } = await d1.from("conversations").select("id, user_a, user_b");
+      const { data: conversations, error: conversationsError } = await d1.from("conversations").select("id, user_a, user_b");
+      if (cancelled) return;
+      if (conversationsError) {
+        console.error("Erro ao carregar conversas:", conversationsError);
+        toast.error("Não foi possível carregar esta conversa");
+        return;
+      }
       let conv = (conversations ?? []).find((conversation) =>
         (conversation.user_a === currentUserId && conversation.user_b === activePartnerId)
         || (conversation.user_a === activePartnerId && conversation.user_b === currentUserId),
       ) ?? null;
 
       if (!conv) {
-        const { data: newConv } = await d1
+        if (!isVip) return;
+        const { data: newConv, error: createError } = await d1
           .from("conversations")
           .insert([{ user_a: currentUserId, user_b: activePartnerId }])
           .select("id")
           .single();
+        if (cancelled) return;
+        if (createError) {
+          console.error("Erro ao iniciar conversa:", createError);
+          toast.error("Não foi possível iniciar esta conversa");
+          return;
+        }
         conv = newConv;
       }
 
       if (conv) {
         setActiveConversationId(conv.id);
 
-        const { data: msgList } = await d1
+        const { data: msgList, error: messagesError } = await d1
           .from("messages")
           .select("*")
           .eq("conversation_id", conv.id)
           .order("created_at", { ascending: true });
+        if (cancelled) return;
+        if (messagesError) {
+          console.error("Erro ao carregar mensagens:", messagesError);
+          toast.error("Não foi possível carregar as mensagens");
+          return;
+        }
 
         const loadedMessages = (msgList ?? []) as ChatMessage[];
+        try {
+          await markConversationRead(conv.id);
+        } catch (error) {
+          console.error("Erro ao marcar conversa como lida:", error);
+          toast.error("Não foi possível atualizar o estado de leitura da conversa");
+        }
+        if (cancelled) return;
+        setActiveConversationStartedByVip(
+          conv.user_a === currentUserId
+            ? isVip
+            : loadedMessages.some((message) => message.sender_id === conv.user_a),
+        );
         const messageIds = loadedMessages.map((message) => message.id);
         let attachments: ChatAttachment[] = [];
         if (messageIds.length) {
@@ -231,6 +276,7 @@ function ChatPage() {
             .from("message_attachments")
             .select("*")
             .in("message_id", messageIds);
+          if (cancelled) return;
           if (attachmentError) {
             console.error("Erro ao carregar anexos da conversa:", attachmentError);
             toast.error("Não foi possível carregar as fotos desta conversa");
@@ -257,10 +303,17 @@ function ChatPage() {
     }
 
     void loadConversationAndMessages();
-  }, [currentUserId, activePartnerId, isVip, conversationPartnerIds, openVipModal]);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, activePartnerId, isVip, conversationPartnerIds, openVipModal, markConversationRead]);
 
   const handleSendMessage = async () => {
     if ((!draft.trim() && !selectedPrivatePhotos.length) || !currentUserId || !activeConversationId) return;
+    if (!isVip && !activeConversationStartedByVip) {
+      toast("Aguarde a primeira mensagem do VIP para responder.");
+      return;
+    }
 
     const text = draft.trim();
     const photoPaths = [...selectedPrivatePhotos];
@@ -289,6 +342,7 @@ function ChatPage() {
     }
 
     if (!data) return;
+    if (isVip) setActiveConversationStartedByVip(true);
 
     let attachments: ChatAttachment[] = [];
     if (photoPaths.length) {
@@ -342,6 +396,8 @@ function ChatPage() {
   };
 
   const partner = partners.find((p) => p.id === activePartnerId) ?? null;
+  const canSendMessages = isVip || activeConversationStartedByVip;
+  const messageSendingEnabled = Boolean(activeConversationId) && canSendMessages;
   const activePreview = messages[messages.length - 1]?.body?.trim() || "Nenhuma mensagem ainda";
   const filteredPartners = partners
     .filter((p) => isVip || conversationPartnerIds.includes(p.id))
@@ -389,6 +445,8 @@ function ChatPage() {
                 ) : (
                   filteredPartners.map((p) => {
                     const isActive = p.id === activePartnerId;
+                    const conversationId = conversationIdsByPartner[p.id];
+                    const unreadCount = conversationId ? unreadByConversation[conversationId] ?? 0 : 0;
                     const preview = conversationPreviews[p.id]
                       ?? (isActive ? activePreview : "Nenhuma mensagem ainda");
 
@@ -396,17 +454,23 @@ function ChatPage() {
                       <button
                         key={p.id}
                         type="button"
+                        aria-label={`${p.nick}${unreadCount > 0 ? `, ${unreadCount} mensagens não lidas` : ""}`}
                         onClick={() => {
                           if (!isVip && !conversationPartnerIds.includes(p.id)) {
                             openVipModal();
                             return;
                           }
+                          setActiveConversationId(null);
+                          setActiveConversationStartedByVip(false);
+                          setMessages([]);
                           setActivePartnerId(p.id);
                         }}
                         className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-all duration-200 ${
                           isActive
                             ? "border-primary/40 bg-primary/10 shadow-[0_0_0_1px_rgba(168,85,247,0.15)]"
-                            : "border-transparent bg-transparent text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                            : unreadCount > 0
+                              ? "border-primary/30 bg-primary/5 text-foreground hover:bg-primary/10"
+                              : "border-transparent bg-transparent text-muted-foreground hover:bg-surface-2 hover:text-foreground"
                         }`}
                       >
                         <div className="relative">
@@ -432,14 +496,19 @@ function ChatPage() {
                           <Link
                             to="/perfil/$id"
                             params={{ id: p.id }}
-                            className="inline-block max-w-full truncate text-sm font-medium text-foreground hover:underline"
+                            className={`inline-block max-w-full truncate text-sm hover:underline ${unreadCount > 0 ? "font-bold text-foreground" : "font-medium text-foreground"}`}
                             aria-label={`Ver perfil de ${p.nick}`}
                             onClick={(event) => event.stopPropagation()}
                           >
                             {p.nick}
                           </Link>
-                          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{preview}</span>
+                          <span className={`mt-0.5 block truncate text-[11px] ${unreadCount > 0 ? "font-medium text-foreground" : "text-muted-foreground"}`}>{preview}</span>
                         </div>
+                        {unreadCount > 0 && (
+                          <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                            {unreadCount > 9 ? "9+" : unreadCount}
+                          </span>
+                        )}
                       </button>
                     );
                   })
@@ -525,20 +594,30 @@ function ChatPage() {
                     Preview da conversa: {activePreview}
                   </div>
 
+                  {!messageSendingEnabled && (
+                    <div className="border-b border-border/70 bg-surface/20 px-4 py-2 text-center text-xs text-muted-foreground">
+                      {activeConversationId
+                        ? "Aguarde a primeira mensagem do VIP para responder."
+                        : "Carregando conversa..."}
+                    </div>
+                  )}
+
                   <div className="border-t border-border/70 bg-surface/40 p-3 sm:p-4">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => void openPrivatePhotoPicker()}
+                        disabled={!activeConversationId}
                         aria-label={canSendPrivatePhotos ? "Enviar fotos do álbum privado" : "Enviar fotos privadas, recurso VIP"}
                         title={canSendPrivatePhotos ? "Enviar foto privada" : "Recurso VIP"}
-                        className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-border text-muted-foreground hover:bg-surface-2 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {canSendPrivatePhotos ? <ImagePlus className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
                       </button>
                       <input
                         type="text"
                         value={draft}
+                        disabled={!messageSendingEnabled}
                         onChange={(event) => setDraft(event.target.value)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
@@ -546,15 +625,15 @@ function ChatPage() {
                             void handleSendMessage();
                           }
                         }}
-                        placeholder="Digite sua mensagem..."
-                        className="min-w-0 flex-1 rounded-full border border-border bg-background/70 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        placeholder={messageSendingEnabled ? "Digite sua mensagem..." : "Aguarde a mensagem inicial do VIP"}
+                        className="min-w-0 flex-1 rounded-full border border-border bg-background/70 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60"
                       />
                       <button
                         type="button"
                         onClick={() => void handleSendMessage()}
                         className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-neon transition-transform duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
                         aria-label="Enviar mensagem"
-                        disabled={!draft.trim() && !selectedPrivatePhotos.length}
+                        disabled={!messageSendingEnabled || (!draft.trim() && !selectedPrivatePhotos.length)}
                       >
                         <SendHorizontal className="h-4 w-4" />
                       </button>

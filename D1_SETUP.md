@@ -15,7 +15,7 @@ Keep binding names `DB` and `MEDIA`; the Worker reads those names.
 
 Run `npm run dev` to build the Worker, initialize and seed local D1, and start Wrangler on port 8080. The CLI and Worker share `.wrangler/state`, so local registration and testing use the same database and do not write to Cloudflare resources. The schema and seed commands are safe to rerun.
 
-The separate `npm run db:init` and `npm run db:seed` commands explicitly apply the schema and fixtures to the configured remote D1 database. Deploy with `npm run build` followed by `npm run cf:deploy`; the Cloudflare commands use Nitro's generated Worker config so its static-assets binding is included.
+The separate `npm run db:init` and `npm run db:seed` commands explicitly apply the schema and fixtures to the configured remote D1 database. Apply `npm run db:init` before deploying schema changes; it also creates the per-conversation read state used for unread-message counts. Deploy with `npm run build` followed by `npm run cf:deploy`; the Cloudflare commands use Nitro's generated Worker config so its static-assets binding is included.
 
 ## Existing account and media migration
 
