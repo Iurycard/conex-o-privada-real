@@ -21,6 +21,7 @@ type R2Object = {
 
 type R2Bucket = {
   get: (key: string) => Promise<R2Object | null>;
+  head: (key: string) => Promise<unknown | null>;
   put: (key: string, value: ReadableStream | ArrayBuffer | ArrayBufferView, options?: unknown) => Promise<unknown>;
   delete: (key: string) => Promise<void>;
 };
@@ -351,9 +352,51 @@ function addScope(table: string, action: string, user: AuthUser): { sql: string;
   if (table === "user_blocks") return { sql: "blocker_id = ?", values: [user.id] };
   if (table === "profile_visits") return { sql: "(visitor_id = ? OR profile_id = ?)", values: [user.id, user.id] };
   if (table === "album_access_requests") return { sql: "(requester_id = ? OR owner_id = ?)", values: [user.id, user.id] };
-  if (table === "conversations") return { sql: "(user_a = ? OR user_b = ?)", values: [user.id, user.id] };
-  if (table === "messages") return { sql: "conversation_id IN (SELECT id FROM conversations WHERE user_a = ? OR user_b = ?)", values: [user.id, user.id] };
-  if (table === "message_attachments") return { sql: "message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.user_a = ? OR c.user_b = ?)", values: [user.id, user.id] };
+  if (table === "conversations") {
+    return {
+      sql: `(user_a = ? OR user_b = ?)
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM conversation_user_deletions d
+            WHERE d.conversation_id = conversations.id AND d.user_id = ?
+          )
+          OR EXISTS (
+            SELECT 1 FROM messages m
+            JOIN conversation_user_deletions d
+              ON d.conversation_id = m.conversation_id AND d.user_id = ?
+            WHERE m.conversation_id = conversations.id
+              AND julianday(m.created_at) > julianday(d.deleted_at)
+          )
+        )`,
+      values: [user.id, user.id, user.id, user.id],
+    };
+  }
+  if (table === "messages") {
+    return {
+      sql: `conversation_id IN (
+        SELECT id FROM conversations WHERE user_a = ? OR user_b = ?
+      )
+      AND julianday(messages.created_at) > julianday(COALESCE((
+        SELECT deleted_at FROM conversation_user_deletions
+        WHERE conversation_id = messages.conversation_id AND user_id = ?
+      ), '1970-01-01 00:00:00'))`,
+      values: [user.id, user.id, user.id],
+    };
+  }
+  if (table === "message_attachments") {
+    return {
+      sql: `message_id IN (
+        SELECT m.id FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE (c.user_a = ? OR c.user_b = ?)
+          AND julianday(m.created_at) > julianday(COALESCE((
+            SELECT deleted_at FROM conversation_user_deletions d
+            WHERE d.conversation_id = c.id AND d.user_id = ?
+          ), '1970-01-01 00:00:00'))
+      )`,
+      values: [user.id, user.id, user.id],
+    };
+  }
   if (table === "reports" && user.role !== "admin") return { sql: "reporter_id = ?", values: [user.id] };
   if (table === "user_roles") return { sql: "user_id = ?", values: [user.id] };
   return { sql: "", values: [] };
@@ -491,24 +534,32 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
         if (!conversation || row["sender_id"] !== user.id) throw new ApiError(403, "Not a participant in this conversation");
         const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
         if (!profile) throw new ApiError(403, "Profile not found");
-        if (!profile.vip) {
-          if (conversation.user_b !== user.id) throw new ApiError(403, "Only the VIP conversation starter can initiate messages");
-          const vipStarterMessage = await db.prepare(
-            "SELECT 1 AS allowed FROM messages WHERE conversation_id = ? AND sender_id = ? LIMIT 1",
-          ).bind(String(row["conversation_id"]), conversation.user_a).first();
-          if (!vipStarterMessage) throw new ApiError(403, "Wait for the VIP member to start the conversation");
-        }
+        if (!profile.vip) await assertFreeCanContinueConversation(db, String(row["conversation_id"]), user.id);
       }
       if (table === "album_access_requests") {
         const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
         if (!profile?.vip) throw new ApiError(403, "Only VIP members can request private album access");
       }
       if (table === "message_attachments") {
-        const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
+        const profile = await db.prepare("SELECT vip, private_album FROM profiles WHERE id = ? LIMIT 1")
+          .bind(user.id).first<{ vip: number; private_album: string }>();
         if (!profile?.vip) throw new ApiError(403, "Only VIP members can send private photo attachments");
         const message = await db.prepare("SELECT 1 AS allowed FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.id = ? AND m.sender_id = ? AND (c.user_a = ? OR c.user_b = ?) LIMIT 1")
           .bind(String(row["message_id"] ?? ""), user.id, user.id, user.id).first();
-        if (!message || typeof row["storage_path"] !== "string" || !validMediaKey(row["storage_path"])) {
+        const storagePath = typeof row["storage_path"] === "string" ? row["storage_path"] : "";
+        let privateAlbum: unknown;
+        try {
+          privateAlbum = JSON.parse(profile.private_album ?? "[]") as unknown;
+        } catch {
+          throw new ApiError(500, "Private album data is invalid");
+        }
+        if (
+          !message
+          || !validMediaKey(storagePath)
+          || !storagePath.startsWith(`${user.id}/private/r2/`)
+          || !Array.isArray(privateAlbum)
+          || !privateAlbum.includes(storagePath)
+        ) {
           throw new ApiError(403, "Invalid message attachment");
         }
       }
@@ -692,6 +743,203 @@ async function chatUnreadHandler(request: Request, db: D1Database, user: AuthUse
   throw new ApiError(404, "Not found");
 }
 
+async function chatDeleteHandler(request: Request, db: D1Database, user: AuthUser) {
+  if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+  assertSameOrigin(request);
+  const body = await readJson(request);
+  const conversationId = typeof body["conversation_id"] === "string" ? body["conversation_id"] : "";
+  if (!conversationId) throw new ApiError(400, "Conversation ID is required");
+
+  const conversation = await db.prepare(
+    "SELECT 1 AS allowed FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1",
+  ).bind(conversationId, user.id, user.id).first();
+  if (!conversation) throw new ApiError(404, "Conversation not found");
+
+  const deletedAt = new Date().toISOString();
+  await db.batch([
+    db.prepare(
+      `INSERT INTO conversation_user_deletions (conversation_id, user_id, deleted_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT (conversation_id, user_id)
+       DO UPDATE SET deleted_at = excluded.deleted_at`,
+    ).bind(conversationId, user.id, deletedAt),
+    db.prepare(
+      `INSERT INTO conversation_read_states (conversation_id, user_id, last_read_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT (conversation_id, user_id)
+       DO UPDATE SET last_read_at = excluded.last_read_at`,
+    ).bind(conversationId, user.id, deletedAt),
+  ]);
+  return json({ conversation_id: conversationId, deleted: true });
+}
+
+async function assertFreeCanContinueConversation(
+  db: D1Database,
+  conversationId: string,
+  userId: string,
+) {
+  const firstMessage = await db.prepare(
+    `SELECT m.sender_id, p.vip
+     FROM messages m
+     JOIN profiles p ON p.id = m.sender_id
+     WHERE m.conversation_id = ?
+     ORDER BY m.created_at ASC, m.rowid ASC
+     LIMIT 1`,
+  ).bind(conversationId).first<{ sender_id: string; vip: number }>();
+  if (!firstMessage || firstMessage.sender_id === userId || !firstMessage.vip) {
+    throw new ApiError(403, "Wait for a VIP member to start the conversation");
+  }
+}
+
+async function chatConversationHandler(request: Request, db: D1Database, user: AuthUser) {
+  if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+  assertSameOrigin(request);
+  const body = await readJson(request);
+  const partnerId = typeof body["partner_id"] === "string" ? body["partner_id"] : "";
+  if (!partnerId || partnerId === user.id) throw new ApiError(400, "Invalid conversation partner");
+
+  const [profile, existingConversation] = await Promise.all([
+    db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1")
+      .bind(user.id).first<{ vip: number }>(),
+    db.prepare(
+      "SELECT id, user_a, user_b FROM conversations WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?) LIMIT 1",
+    ).bind(user.id, partnerId, partnerId, user.id).first<{ id: string; user_a: string; user_b: string }>(),
+  ]);
+  if (!profile) throw new ApiError(404, "Profile not found");
+  let conversation = existingConversation;
+
+  if (!conversation) {
+    if (!profile.vip) throw new ApiError(403, "Only VIP members can start conversations");
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    try {
+      await db.prepare(
+        "INSERT INTO conversations (id, user_a, user_b, created_at, updated_at, last_message_at) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(id, user.id, partnerId, now, now, now).run();
+      conversation = { id, user_a: user.id, user_b: partnerId };
+    } catch (error) {
+      conversation = await db.prepare(
+        "SELECT id, user_a, user_b FROM conversations WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?) LIMIT 1",
+      ).bind(user.id, partnerId, partnerId, user.id).first<{ id: string; user_a: string; user_b: string }>();
+      if (!conversation) throw error;
+    }
+  }
+
+  if (!profile.vip) {
+    await assertFreeCanContinueConversation(db, conversation.id, user.id);
+  }
+
+  const [deletion] = await Promise.all([
+    db.prepare(
+      "SELECT deleted_at FROM conversation_user_deletions WHERE conversation_id = ? AND user_id = ? LIMIT 1",
+    ).bind(conversation.id, user.id).first<{ deleted_at: string }>(),
+    db.prepare(
+      `INSERT INTO conversation_read_states (conversation_id, user_id, last_read_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT (conversation_id, user_id)
+       DO UPDATE SET last_read_at = excluded.last_read_at`,
+    ).bind(conversation.id, user.id, new Date().toISOString()).run(),
+  ]);
+  const messageHistoryFilter = deletion ? "AND julianday(m.created_at) > julianday(?)" : "";
+  const messageValues = deletion ? [conversation.id, deletion.deleted_at] : [conversation.id];
+  const messagesResult = await db.prepare(
+    `SELECT m.*,
+       COALESCE((
+         SELECT json_group_array(json_object(
+           'id', a.id,
+           'message_id', a.message_id,
+           'storage_path', a.storage_path,
+           'created_at', a.created_at
+         ))
+         FROM message_attachments a WHERE a.message_id = m.id
+       ), '[]') AS attachments_json
+     FROM messages m
+     WHERE m.conversation_id = ? ${messageHistoryFilter}
+     ORDER BY m.created_at ASC`,
+  ).bind(...messageValues).all<D1Row>();
+
+  const messages = (messagesResult.results ?? []).map((row) => {
+    let attachments: unknown = [];
+    try {
+      attachments = JSON.parse(String(row["attachments_json"] ?? "[]")) as unknown;
+    } catch (error) {
+      console.error("Failed to decode chat attachments:", error);
+      throw new ApiError(500, "Failed to load conversation attachments");
+    }
+    const { attachments_json: _attachmentsJson, ...message } = row;
+    return { ...message, attachments };
+  });
+  return json({ conversation, messages });
+}
+
+async function chatSendHandler(request: Request, db: D1Database, env: WorkerEnv, user: AuthUser) {
+  if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+  assertSameOrigin(request);
+  const body = await readJson(request);
+  const conversationId = typeof body["conversation_id"] === "string" ? body["conversation_id"] : "";
+  const text = typeof body["body"] === "string" ? body["body"] : "";
+  const attachmentPaths = body["storage_paths"] ?? [];
+  if (!conversationId || !Array.isArray(attachmentPaths) || attachmentPaths.length > 10) {
+    throw new ApiError(400, "Invalid message data");
+  }
+  if (!text.trim() && attachmentPaths.length === 0) throw new ApiError(400, "Message cannot be empty");
+  if (attachmentPaths.some((path) => typeof path !== "string")) throw new ApiError(400, "Invalid attachment path");
+
+  const [conversation, profile] = await Promise.all([
+    db.prepare("SELECT user_a, user_b FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1")
+      .bind(conversationId, user.id, user.id).first<{ user_a: string; user_b: string }>(),
+    db.prepare("SELECT vip, private_album FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number; private_album: string }>(),
+  ]);
+  if (!conversation || !profile) throw new ApiError(403, "Not a participant in this conversation");
+  if (!profile.vip) await assertFreeCanContinueConversation(db, conversationId, user.id);
+
+  const paths = attachmentPaths as string[];
+  if (paths.length && !profile.vip) throw new ApiError(403, "Only VIP members can send private photo attachments");
+  let privateAlbum: unknown;
+  try {
+    privateAlbum = JSON.parse(profile.private_album ?? "[]") as unknown;
+  } catch {
+    throw new ApiError(500, "Private album data is invalid");
+  }
+  for (const path of paths) {
+    if (!validMediaKey(path) || !path.startsWith(`${user.id}/private/r2/`)) {
+      throw new ApiError(403, "Invalid private photo attachment");
+    }
+    if (!Array.isArray(privateAlbum) || !privateAlbum.includes(path)) {
+      throw new ApiError(403, "Photo is not in your private album");
+    }
+  }
+  if (paths.length) {
+    if (!env.MEDIA) throw new ApiError(503, "R2 binding MEDIA is not configured");
+    const objects = await Promise.all(paths.map((path) => env.MEDIA!.head(path)));
+    if (objects.some((object) => !object)) throw new ApiError(404, "A selected photo no longer exists");
+  }
+
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  const messageBody = text.trim() || (paths.length === 1 ? "Enviou uma foto privada" : "Enviou fotos privadas");
+  const attachments = paths.map((storagePath) => ({
+    id: crypto.randomUUID(),
+    message_id: id,
+    storage_path: storagePath,
+    created_at: createdAt,
+  }));
+  const statements = [
+    db.prepare("INSERT INTO messages (id, conversation_id, sender_id, body, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(id, conversationId, user.id, messageBody, createdAt),
+    ...attachments.map((attachment) => db.prepare(
+      "INSERT INTO message_attachments (id, message_id, storage_path, created_at) VALUES (?, ?, ?, ?)",
+    ).bind(attachment.id, id, attachment.storage_path, createdAt)),
+    db.prepare(
+      "UPDATE conversations SET last_message = ?, last_message_at = ?, updated_at = ? WHERE id = ?",
+    ).bind(messageBody, createdAt, createdAt, conversationId),
+  ];
+  await db.batch(statements);
+  return json({
+    message: { id, conversation_id: conversationId, sender_id: user.id, body: messageBody, created_at: createdAt, attachments },
+  });
+}
+
 export async function handleWorkerApi(request: Request, rawEnv: unknown) {
   try {
     if (!rawEnv || typeof rawEnv !== "object") throw new ApiError(503, "Worker bindings are not available");
@@ -704,6 +952,9 @@ export async function handleWorkerApi(request: Request, rawEnv: unknown) {
     if (path === "/api/chat/unread" || path === "/api/chat/read") {
       return await chatUnreadHandler(request, db, user, path);
     }
+    if (path === "/api/chat/conversation") return await chatConversationHandler(request, db, user);
+    if (path === "/api/chat/delete") return await chatDeleteHandler(request, db, user);
+    if (path === "/api/chat/send") return await chatSendHandler(request, db, env, user);
     if (path === "/api/vip/activate") return await activatePrototypeVip(request, db, user);
     if (path === "/api/data") return await dataHandler(request, db, user);
     if (path === "/api/media") return await mediaHandler(request, db, env, user);

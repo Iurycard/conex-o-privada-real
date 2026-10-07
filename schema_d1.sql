@@ -144,6 +144,13 @@ CREATE TABLE IF NOT EXISTS conversation_read_states (
   PRIMARY KEY (conversation_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS conversation_user_deletions (
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  deleted_at DATETIME NOT NULL,
+  PRIMARY KEY (conversation_id, user_id)
+);
+
 INSERT OR IGNORE INTO conversation_read_states (conversation_id, user_id, last_read_at)
 SELECT c.id, c.user_a, COALESCE(MAX(m.created_at), '1970-01-01 00:00:00')
 FROM conversations c

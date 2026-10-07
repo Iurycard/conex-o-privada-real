@@ -1,9 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Check, ImagePlus, Lock, SendHorizontal } from "lucide-react";
+import { ArrowLeft, Check, ImagePlus, Lock, SendHorizontal, Trash2 } from "lucide-react";
 import { d1 } from "@/lib/d1-client"
 import { AppShell } from "@/components/app-shell";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useVip } from "@/context/vip";
 import { useAlbumUrls } from "@/lib/album-storage";
 import { toast } from "sonner";
@@ -43,6 +53,24 @@ type ChatPartner = {
   nick: string;
   avatar: string | null;
 };
+
+type ChatConversation = {
+  id: string;
+  user_a: string;
+  user_b: string;
+};
+
+async function chatApiRequest<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json() as T & { error?: string };
+  if (!response.ok) throw new Error(payload.error ?? `Request failed (${response.status})`);
+  return payload;
+}
 
 function PrivatePhotoOption({
   path,
@@ -110,10 +138,14 @@ function ChatPage() {
   const [privatePhotoPickerOpen, setPrivatePhotoPickerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const activeConversationIdRef = useRef<string | null>(null);
   const [activeConversationStartedByVip, setActiveConversationStartedByVip] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<{ id: string; partnerId: string; nick: string } | null>(null);
+  const [deletingConversation, setDeletingConversation] = useState(false);
   const { isVip, openVipModal } = useVip();
   const { user } = useAuth();
-  const { unreadByConversation, markConversationRead } = useUnreadMessages();
+  const { unreadByConversation, refreshUnreadMessages } = useUnreadMessages();
 
   const openPrivatePhotoPicker = async () => {
     if (!user) return;
@@ -151,15 +183,23 @@ function ChatPage() {
       if (!user) return;
       setCurrentUserId(user.id);
 
-      const { data: profiles } = await d1.from("profiles").select("id, nick, avatar").neq("id", user.id);
-
-      if (profiles && profiles.length > 0) {
-        setPartners(profiles);
+      const [profilesResult, conversationsResult] = await Promise.all([
+        d1.from("profiles").select("id, nick, avatar").neq("id", user.id),
+        d1.from("conversations").select("id, user_a, user_b"),
+      ]);
+      if (profilesResult.error) {
+        console.error("Erro ao carregar perfis do chat:", profilesResult.error);
+        toast.error("Não foi possível carregar os contatos");
+        return;
       }
-
-      const { data: conversations } = await d1
-        .from("conversations")
-        .select("id, user_a, user_b");
+      if (conversationsResult.error) {
+        console.error("Erro ao carregar conversas:", conversationsResult.error);
+        toast.error("Não foi possível carregar as conversas");
+        return;
+      }
+      const profiles = profilesResult.data as ChatPartner[] | null;
+      const conversations = conversationsResult.data as ChatConversation[] | null;
+      setPartners(profiles ?? []);
 
       const partnerIds = (conversations ?? []).map((conversation) =>
         conversation.user_a === user.id ? conversation.user_b : conversation.user_a,
@@ -181,11 +221,15 @@ function ChatPage() {
         );
       }
 
-      const { data: latestMessages } = await d1
+      const { data: latestMessages, error: latestMessagesError } = await d1
         .from("messages")
         .select("id, sender_id, conversation_id, body, created_at")
         .in("conversation_id", [...partnerByConversation.keys()])
         .order("created_at", { ascending: false });
+      if (latestMessagesError) {
+        console.error("Erro ao carregar prévias das conversas:", latestMessagesError);
+        toast.error("Não foi possível carregar as prévias das conversas");
+      }
 
       const previews: Record<string, string> = {};
       for (const message of latestMessages ?? []) {
@@ -197,7 +241,10 @@ function ChatPage() {
       setConversationPreviews(previews);
     }
 
-    void init();
+    void init().catch((error: unknown) => {
+      console.error("Erro ao inicializar o chat:", error);
+      toast.error("Não foi possível carregar o chat");
+    });
   }, [user]);
 
   useEffect(() => {
@@ -205,100 +252,44 @@ function ChatPage() {
     async function loadConversationAndMessages() {
       if (!currentUserId || !activePartnerId) return;
       setActiveConversationId(null);
+      activeConversationIdRef.current = null;
       setActiveConversationStartedByVip(false);
       setMessages([]);
-      if (!isVip && !conversationPartnerIds.includes(activePartnerId)) {
-        setActivePartnerId(null);
-        openVipModal();
-        return;
-      }
-
-      const { data: conversations, error: conversationsError } = await d1.from("conversations").select("id, user_a, user_b");
-      if (cancelled) return;
-      if (conversationsError) {
-        console.error("Erro ao carregar conversas:", conversationsError);
-        toast.error("Não foi possível carregar esta conversa");
-        return;
-      }
-      let conv = (conversations ?? []).find((conversation) =>
-        (conversation.user_a === currentUserId && conversation.user_b === activePartnerId)
-        || (conversation.user_a === activePartnerId && conversation.user_b === currentUserId),
-      ) ?? null;
-
-      if (!conv) {
-        if (!isVip) return;
-        const { data: newConv, error: createError } = await d1
-          .from("conversations")
-          .insert([{ user_a: currentUserId, user_b: activePartnerId }])
-          .select("id")
-          .single();
+      try {
+        const result = await chatApiRequest<{
+          conversation: ChatConversation;
+          messages: ChatMessage[];
+        }>("/api/chat/conversation", { partner_id: activePartnerId });
         if (cancelled) return;
-        if (createError) {
-          console.error("Erro ao iniciar conversa:", createError);
-          toast.error("Não foi possível iniciar esta conversa");
-          return;
-        }
-        conv = newConv;
-      }
 
-      if (conv) {
-        setActiveConversationId(conv.id);
-
-        const { data: msgList, error: messagesError } = await d1
-          .from("messages")
-          .select("*")
-          .eq("conversation_id", conv.id)
-          .order("created_at", { ascending: true });
-        if (cancelled) return;
-        if (messagesError) {
-          console.error("Erro ao carregar mensagens:", messagesError);
-          toast.error("Não foi possível carregar as mensagens");
-          return;
-        }
-
-        const loadedMessages = (msgList ?? []) as ChatMessage[];
-        try {
-          await markConversationRead(conv.id);
-        } catch (error) {
-          console.error("Erro ao marcar conversa como lida:", error);
-          toast.error("Não foi possível atualizar o estado de leitura da conversa");
-        }
-        if (cancelled) return;
+        const { conversation, messages: loadedMessages } = result;
+        setActiveConversationId(conversation.id);
+        activeConversationIdRef.current = conversation.id;
+        setConversationPartnerIds((partnerIds) => (
+          partnerIds.includes(activePartnerId) ? partnerIds : [...partnerIds, activePartnerId]
+        ));
+        setConversationIdsByPartner((conversationIds) => ({
+          ...conversationIds,
+          [activePartnerId]: conversation.id,
+        }));
         setActiveConversationStartedByVip(
-          conv.user_a === currentUserId
-            ? isVip
-            : loadedMessages.some((message) => message.sender_id === conv.user_a),
+          isVip || loadedMessages.length > 0,
         );
-        const messageIds = loadedMessages.map((message) => message.id);
-        let attachments: ChatAttachment[] = [];
-        if (messageIds.length) {
-          const { data: attachmentRows, error: attachmentError } = await d1
-            .from("message_attachments")
-            .select("*")
-            .in("message_id", messageIds);
-          if (cancelled) return;
-          if (attachmentError) {
-            console.error("Erro ao carregar anexos da conversa:", attachmentError);
-            toast.error("Não foi possível carregar as fotos desta conversa");
-          }
-          attachments = (attachmentRows ?? []) as ChatAttachment[];
-        }
-        const attachmentsByMessage = new Map<string, ChatAttachment[]>();
-        for (const attachment of attachments) {
-          const current = attachmentsByMessage.get(attachment.message_id) ?? [];
-          attachmentsByMessage.set(attachment.message_id, [...current, attachment]);
-        }
-        setMessages(loadedMessages.map((message) => ({
-          ...message,
-          attachments: attachmentsByMessage.get(message.id) ?? [],
-        })));
-        const latestMessage = msgList?.at(-1) as ChatMessage | undefined;
+        setMessages(loadedMessages);
+        const latestMessage = loadedMessages.at(-1);
         if (latestMessage) {
           setConversationPreviews((previews) => ({
             ...previews,
             [activePartnerId]: messagePreview(latestMessage, currentUserId),
           }));
         }
+        void refreshUnreadMessages().catch((error: unknown) => {
+          console.error("Erro ao atualizar mensagens não lidas:", error);
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Erro ao carregar conversa:", error);
+        toast.error(error instanceof Error ? error.message : "Não foi possível carregar esta conversa");
       }
     }
 
@@ -306,10 +297,10 @@ function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, activePartnerId, isVip, conversationPartnerIds, openVipModal, markConversationRead]);
+  }, [currentUserId, activePartnerId, isVip, refreshUnreadMessages]);
 
   const handleSendMessage = async () => {
-    if ((!draft.trim() && !selectedPrivatePhotos.length) || !currentUserId || !activeConversationId) return;
+    if (sendingMessage || (!draft.trim() && !selectedPrivatePhotos.length) || !currentUserId || !activeConversationId) return;
     if (!isVip && !activeConversationStartedByVip) {
       toast("Aguarde a primeira mensagem do VIP para responder.");
       return;
@@ -317,82 +308,108 @@ function ChatPage() {
 
     const text = draft.trim();
     const photoPaths = [...selectedPrivatePhotos];
-
-    const { data, error } = await d1
-      .from("messages")
-      .insert([
-        {
-          sender_id: currentUserId,
-          conversation_id: activeConversationId,
-          body: text || (photoPaths.length === 1 ? "Enviou uma foto privada" : "Enviou fotos privadas"),
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Erro ao gravar mensagem no D1:", {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
+    const conversationId = activeConversationId;
+    setSendingMessage(true);
+    try {
+      const result = await chatApiRequest<{ message: ChatMessage }>("/api/chat/send", {
+        conversation_id: conversationId,
+        body: text,
+        storage_paths: photoPaths,
       });
-      toast.error("Erro ao enviar mensagem");
+      const { message } = result;
+      if (isVip) setActiveConversationStartedByVip(true);
+
+      if (activeConversationIdRef.current === conversationId) {
+        setMessages((previous) => [...previous, message]);
+        setDraft("");
+        setSelectedPrivatePhotos([]);
+      }
+      if (activePartnerId) {
+        setConversationPreviews((previews) => ({
+          ...previews,
+          [activePartnerId]: messagePreview(message, currentUserId),
+        }));
+      }
+
+      let notificationFailed = false;
+      if (activePartnerId && activePartnerId !== currentUserId) {
+        const { error: notificationError } = await d1.from("notifications").insert({
+          user_id: activePartnerId,
+          actor_id: currentUserId,
+          type: "message",
+          body: "enviou uma mensagem",
+        });
+        if (notificationError) {
+          notificationFailed = true;
+          console.error("Mensagem enviada, mas a notificação falhou:", notificationError);
+        }
+      }
+      if (notificationFailed) {
+        toast.error("Mensagem enviada, mas não foi possível notificar o destinatário");
+      } else {
+        toast.success(photoPaths.length ? "Mensagem e fotos enviadas" : "Mensagem enviada");
+      }
+      void refreshUnreadMessages().catch((error: unknown) => {
+        console.error("Erro ao atualizar mensagens não lidas:", error);
+      });
+    } catch (error) {
+      console.error("Erro ao enviar mensagem:", error);
+      toast.error(error instanceof Error ? error.message : "Erro ao enviar mensagem");
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!conversationToDelete || deletingConversation) return;
+    const target = conversationToDelete;
+    setDeletingConversation(true);
+    try {
+      await chatApiRequest<{ deleted: boolean }>("/api/chat/delete", {
+        conversation_id: target.id,
+      });
+      setConversationPartnerIds((partnerIds) => partnerIds.filter((id) => id !== target.partnerId));
+      setConversationIdsByPartner((conversationIds) => Object.fromEntries(
+        Object.entries(conversationIds).filter(([partnerId]) => partnerId !== target.partnerId),
+      ));
+      setConversationPreviews((previews) => Object.fromEntries(
+        Object.entries(previews).filter(([partnerId]) => partnerId !== target.partnerId),
+      ));
+      if (activeConversationIdRef.current === target.id) {
+        setActivePartnerId(null);
+        setActiveConversationId(null);
+        activeConversationIdRef.current = null;
+        setActiveConversationStartedByVip(false);
+        setMessages([]);
+        setDraft("");
+        setSelectedPrivatePhotos([]);
+      }
+      setConversationToDelete(null);
+      toast.success("Conversa excluída somente para você");
+      try {
+        await refreshUnreadMessages();
+      } catch (error) {
+        console.error("Conversa excluída, mas não foi possível atualizar mensagens não lidas:", error);
+        toast.error("Conversa excluída, mas a contagem de não lidas não foi atualizada");
+      }
+    } catch (error) {
+      console.error("Erro ao excluir conversa:", error);
+      toast.error(error instanceof Error ? error.message : "Não foi possível excluir a conversa");
+    } finally {
+      setDeletingConversation(false);
+    }
+  };
+
+  const openConversation = (partnerId: string) => {
+    if (!isVip && !conversationPartnerIds.includes(partnerId)) {
+      openVipModal();
       return;
     }
-
-    if (!data) return;
-    if (isVip) setActiveConversationStartedByVip(true);
-
-    let attachments: ChatAttachment[] = [];
-    if (photoPaths.length) {
-      const { data: attachmentRows, error: attachmentError } = await d1
-        .from("message_attachments")
-        .insert(photoPaths.map((storagePath) => ({ message_id: data.id, storage_path: storagePath })))
-        .select("*");
-      if (attachmentError || (attachmentRows ?? []).length !== photoPaths.length) {
-        console.error("Erro ao gravar anexos privados no D1:", {
-          code: attachmentError?.code,
-          message: attachmentError?.message ?? "Quantidade de anexos gravados diferente da selecionada",
-          details: attachmentError?.details,
-          hint: attachmentError?.hint,
-          expected: photoPaths.length,
-          received: attachmentRows?.length ?? 0,
-        });
-        setMessages((previous) => [...previous, { ...(data as ChatMessage), attachments: [] }]);
-        if (activePartnerId) {
-          setConversationPreviews((previews) => ({
-            ...previews,
-            [activePartnerId]: messagePreview(data as ChatMessage, currentUserId),
-          }));
-        }
-        toast.error("A mensagem foi criada, mas o banco não gravou as fotos. A seleção foi mantida.");
-        return;
-      }
-      attachments = attachmentRows as ChatAttachment[];
-      toast.success("Mensagem e fotos enviadas");
-    } else {
-      toast.success("Mensagem enviada");
-    }
-
-    setMessages((previous) => [...previous, { ...(data as ChatMessage), attachments }]);
-    setDraft("");
-    setSelectedPrivatePhotos([]);
-    if (activePartnerId) {
-      setConversationPreviews((previews) => ({
-        ...previews,
-        [activePartnerId]: messagePreview(data as ChatMessage, currentUserId),
-      }));
-    }
-
-    if (activePartnerId && activePartnerId !== currentUserId) {
-      await d1.from("notifications").insert({
-        user_id: activePartnerId,
-        actor_id: currentUserId,
-        type: "message",
-        body: "enviou uma mensagem",
-      });
-    }
+    setActiveConversationId(null);
+    activeConversationIdRef.current = null;
+    setActiveConversationStartedByVip(false);
+    setMessages([]);
+    setActivePartnerId(partnerId);
   };
 
   const partner = partners.find((p) => p.id === activePartnerId) ?? null;
@@ -451,65 +468,71 @@ function ChatPage() {
                       ?? (isActive ? activePreview : "Nenhuma mensagem ainda");
 
                     return (
-                      <button
+                      <div
                         key={p.id}
-                        type="button"
-                        aria-label={`${p.nick}${unreadCount > 0 ? `, ${unreadCount} mensagens não lidas` : ""}`}
-                        onClick={() => {
-                          if (!isVip && !conversationPartnerIds.includes(p.id)) {
-                            openVipModal();
-                            return;
-                          }
-                          setActiveConversationId(null);
-                          setActiveConversationStartedByVip(false);
-                          setMessages([]);
-                          setActivePartnerId(p.id);
-                        }}
-                        className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-all duration-200 ${
+                        className={`flex items-center gap-1 rounded-2xl border px-1 ${
                           isActive
                             ? "border-primary/40 bg-primary/10 shadow-[0_0_0_1px_rgba(168,85,247,0.15)]"
                             : unreadCount > 0
-                              ? "border-primary/30 bg-primary/5 text-foreground hover:bg-primary/10"
-                              : "border-transparent bg-transparent text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                              ? "border-primary/30 bg-primary/5"
+                              : "border-transparent bg-transparent hover:bg-surface-2"
                         }`}
                       >
-                        <div className="relative">
-                          <Link
-                            to="/perfil/$id"
-                            params={{ id: p.id }}
-                            className="block"
-                            aria-label={`Ver perfil de ${p.nick}`}
-                            onClick={(event) => event.stopPropagation()}
-                          >
+                        <Link
+                          to="/perfil/$id"
+                          params={{ id: p.id }}
+                          className="relative ml-2 shrink-0"
+                          aria-label={`Ver perfil de ${p.nick}`}
+                        >
                             <img
                               src={
                                 p.avatar ||
                                 "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='%239CA3AF'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 4c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm0 14c-2.03 0-3.8-1.04-4.83-2.6.03-1.6 3.23-2.4 4.83-2.4s4.8 0.8 4.83 2.4c-1.03 1.56-2.8 2.6-4.83 2.6z'/></svg>"
                               }
-                              alt={p.nick}
-                              className="h-10 w-10 rounded-full border border-border object-cover bg-surface-2"
+                              alt=""
+                              className="h-10 w-10 rounded-full border border-border bg-surface-2 object-cover"
                             />
-                          </Link>
-                          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-400" />
-                        </div>
-                        <div className="min-w-0 flex-1">
+                            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-emerald-400" />
+                        </Link>
+                        <div className="min-w-0 flex-1 py-2.5">
                           <Link
                             to="/perfil/$id"
                             params={{ id: p.id }}
-                            className={`inline-block max-w-full truncate text-sm hover:underline ${unreadCount > 0 ? "font-bold text-foreground" : "font-medium text-foreground"}`}
+                            className={`block truncate text-sm hover:underline ${unreadCount > 0 ? "font-bold text-foreground" : "font-medium text-foreground"}`}
                             aria-label={`Ver perfil de ${p.nick}`}
-                            onClick={(event) => event.stopPropagation()}
                           >
-                            {p.nick}
+                              {p.nick}
                           </Link>
-                          <span className={`mt-0.5 block truncate text-[11px] ${unreadCount > 0 ? "font-medium text-foreground" : "text-muted-foreground"}`}>{preview}</span>
+                          <button
+                            type="button"
+                            aria-label={`Abrir conversa com ${p.nick}${unreadCount > 0 ? `, ${unreadCount} mensagens não lidas` : ""}`}
+                            onClick={() => openConversation(p.id)}
+                            className={`mt-0.5 block w-full truncate text-left text-[11px] ${unreadCount > 0 ? "font-medium text-foreground" : "text-muted-foreground"}`}
+                          >
+                              {preview}
+                          </button>
                         </div>
                         {unreadCount > 0 && (
                           <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
                             {unreadCount > 9 ? "9+" : unreadCount}
                           </span>
                         )}
-                      </button>
+                        {conversationId && (
+                          <button
+                            type="button"
+                            aria-label={`Excluir conversa com ${p.nick} somente para você`}
+                            title="Excluir conversa somente para você"
+                            onClick={() => setConversationToDelete({
+                              id: conversationId,
+                              partnerId: p.id,
+                              nick: p.nick,
+                            })}
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     );
                   })
                 )}
@@ -525,7 +548,11 @@ function ChatPage() {
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
-                        onClick={() => setActivePartnerId(null)}
+                        onClick={() => {
+                          setActivePartnerId(null);
+                          setActiveConversationId(null);
+                          activeConversationIdRef.current = null;
+                        }}
                         className="grid h-9 w-9 place-items-center rounded-full hover:bg-surface-2 lg:hidden"
                         aria-label="Voltar para conversas"
                       >
@@ -617,7 +644,7 @@ function ChatPage() {
                       <input
                         type="text"
                         value={draft}
-                        disabled={!messageSendingEnabled}
+                        disabled={!messageSendingEnabled || sendingMessage}
                         onChange={(event) => setDraft(event.target.value)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
@@ -633,7 +660,7 @@ function ChatPage() {
                         onClick={() => void handleSendMessage()}
                         className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-neon transition-transform duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
                         aria-label="Enviar mensagem"
-                        disabled={!messageSendingEnabled || (!draft.trim() && !selectedPrivatePhotos.length)}
+                        disabled={sendingMessage || !messageSendingEnabled || (!draft.trim() && !selectedPrivatePhotos.length)}
                       >
                         <SendHorizontal className="h-4 w-4" />
                       </button>
@@ -665,9 +692,17 @@ function ChatPage() {
                       key={path}
                       path={path}
                       selected={selected}
-                      onSelect={() => setSelectedPrivatePhotos((photos) => (
-                        selected ? photos.filter((photo) => photo !== path) : [...photos, path]
-                      ))}
+                      onSelect={() => {
+                        if (selected) {
+                          setSelectedPrivatePhotos((photos) => photos.filter((photo) => photo !== path));
+                          return;
+                        }
+                        if (selectedPrivatePhotos.length >= 10) {
+                          toast("Você pode enviar até 10 fotos por mensagem.");
+                          return;
+                        }
+                        setSelectedPrivatePhotos((photos) => [...photos, path]);
+                      }}
                     />
                   );
                 })}
@@ -686,6 +721,34 @@ function ChatPage() {
           )}
         </DialogContent>
       </Dialog>
+      <AlertDialog
+        open={Boolean(conversationToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deletingConversation) setConversationToDelete(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-sm rounded-xl border-border bg-surface">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A conversa com {conversationToDelete?.nick} será removida da sua lista e o histórico anterior deixará de aparecer para você. A outra pessoa continuará vendo a conversa normalmente. Se houver novas mensagens, a conversa poderá voltar à sua lista sem o histórico anterior.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingConversation}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingConversation}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteConversation();
+              }}
+            >
+              {deletingConversation ? "Excluindo..." : "Excluir para mim"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 }

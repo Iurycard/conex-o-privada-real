@@ -16,6 +16,7 @@ import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useVip } from "@/context/vip";
 import { useProfiles } from "@/context/profiles-context";
+import { AvatarOrb } from "@/components/bits";
 import { useSocial } from "@/hooks/use-social";
 import { useUnreadMessages } from "@/hooks/use-unread-messages";
 import { Textarea } from "@/components/ui/textarea";
@@ -272,6 +273,7 @@ function Logo() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { isVip, openVipModal } = useVip();
+  const { current } = useProfiles();
   const { unreadCount } = useSocial();
   const { unreadMessageCount } = useUnreadMessages();
 
@@ -313,7 +315,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-surface/70 hover:text-foreground"
             >
               <span className="relative">
-                <Icon className="h-4.5 w-4.5" />
+                {to === "/perfil" && current ? (
+                  <AvatarOrb profile={current} size={18} ring={false} />
+                ) : (
+                  <Icon className="h-4.5 w-4.5" />
+                )}
                 {to === "/notificacoes" && unreadCount > 0 && (
                   <span className="absolute -right-2 -top-2 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
                     {unreadCount > 9 ? "9+" : unreadCount}
@@ -358,7 +364,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 overflow-hidden py-1 text-[10px] text-muted-foreground"
             >
               <span className="relative">
-                <Icon className="h-5 w-5" />
+                {to === "/perfil" && current ? (
+                  <AvatarOrb profile={current} size={20} ring={false} />
+                ) : (
+                  <Icon className="h-5 w-5" />
+                )}
                 {to === "/notificacoes" && unreadCount > 0 && (
                   <span className="absolute -right-2 -top-2 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
                     {unreadCount > 9 ? "9+" : unreadCount}
