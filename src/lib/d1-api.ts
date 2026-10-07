@@ -1,3 +1,10 @@
+import {
+  sendDailyActivityReport,
+  sendPasswordReset,
+  type DailyActivity,
+  type EmailEnvironment,
+} from "@/email";
+
 type D1Value = string | number | null | Uint8Array;
 type D1Row = Record<string, unknown>;
 
@@ -26,7 +33,7 @@ type R2Bucket = {
   delete: (key: string) => Promise<void>;
 };
 
-type WorkerEnv = { DB: D1Database; MEDIA?: R2Bucket };
+type WorkerEnv = { DB: D1Database; MEDIA?: R2Bucket } & EmailEnvironment;
 type AuthUser = { id: string; email: string; role: string };
 
 const SESSION_COOKIE = "cp_session";
@@ -178,7 +185,7 @@ function assertSameOrigin(request: Request) {
   if (origin && origin !== new URL(request.url).origin) throw new ApiError(403, "Cross-origin request rejected");
 }
 
-async function authHandler(request: Request, db: D1Database, path: string) {
+async function authHandler(request: Request, db: D1Database, env: WorkerEnv, path: string) {
   if (path === "/api/auth/session" && request.method === "GET") {
     const user = await getUser(request, db);
     return json({ user: user ? { id: user.id, email: user.email, app_metadata: { role: user.role } } : null });
@@ -208,6 +215,142 @@ async function authHandler(request: Request, db: D1Database, path: string) {
       db.prepare("UPDATE auth_users SET password_hash = ? WHERE id = ?").bind(await hashPassword(newPassword), user.id),
       db.prepare("DELETE FROM auth_sessions WHERE user_id = ? AND token_hash <> ?").bind(user.id, tokenHash),
     ]);
+    return json({ ok: true });
+  }
+
+  if (path === "/api/auth/password-reset/request" && request.method === "POST") {
+    assertSameOrigin(request);
+    const body = await readJson(request);
+    const email = typeof body["email"] === "string" ? body["email"].trim().toLowerCase() : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      throw new ApiError(400, "Informe um e-mail válido");
+    }
+    if (!env.RESEND_API_KEY || !env.EMAIL_FROM || !env.APP_URL) {
+      throw new ApiError(503, "Password reset email is not configured");
+    }
+    let appUrl: URL;
+    try {
+      appUrl = new URL(env.APP_URL);
+    } catch {
+      throw new ApiError(503, "APP_URL must be a valid public application URL");
+    }
+    if (appUrl.protocol !== "https:" && appUrl.hostname !== "localhost" && appUrl.hostname !== "127.0.0.1") {
+      throw new ApiError(503, "APP_URL must use HTTPS");
+    }
+    const genericResponse = json({
+      ok: true,
+      message: "Se o e-mail estiver cadastrado, você receberá instruções para redefinir sua senha.",
+    });
+    const now = new Date();
+    const nowIso = now.toISOString();
+    await db.batch([
+      db.prepare(
+        "DELETE FROM auth_password_reset_tokens WHERE expires_at <= ? OR used_at IS NOT NULL",
+      ).bind(nowIso),
+      db.prepare(
+        "DELETE FROM auth_password_reset_requests WHERE julianday(last_requested_at) < julianday(?)",
+      ).bind(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+    ]);
+    const emailHash = bytesToBase64Url(await sha256(email));
+    const throttle = await db.prepare(
+      "SELECT request_count, window_started_at, last_requested_at FROM auth_password_reset_requests WHERE email_hash = ? LIMIT 1",
+    ).bind(emailHash).first<{
+      request_count: number;
+      window_started_at: string;
+      last_requested_at: string;
+    }>();
+    const sameWindow = Boolean(
+      throttle && now.getTime() - new Date(throttle.window_started_at).getTime() < 60 * 60 * 1000,
+    );
+    if (throttle && now.getTime() - new Date(throttle.last_requested_at).getTime() < 60 * 1000) {
+      return genericResponse;
+    }
+    if (sameWindow && throttle.request_count >= 5) return genericResponse;
+    await db.prepare(
+      `INSERT INTO auth_password_reset_requests (email_hash, request_count, window_started_at, last_requested_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (email_hash) DO UPDATE SET
+         request_count = excluded.request_count,
+         window_started_at = excluded.window_started_at,
+         last_requested_at = excluded.last_requested_at`,
+    ).bind(
+      emailHash,
+      sameWindow && throttle ? throttle.request_count + 1 : 1,
+      sameWindow && throttle ? throttle.window_started_at : nowIso,
+      nowIso,
+    ).run();
+
+    const account = await db.prepare(
+      "SELECT id, email FROM auth_users WHERE email = ? COLLATE NOCASE LIMIT 1",
+    ).bind(email).first<{ id: string; email: string }>();
+    if (!account) return genericResponse;
+
+    const rawToken = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+    const tokenHash = bytesToBase64Url(await sha256(rawToken));
+    const tokenId = crypto.randomUUID();
+    const expiresAt = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
+    await db.prepare(
+      "INSERT INTO auth_password_reset_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+    ).bind(tokenId, account.id, tokenHash, expiresAt).run();
+    const resetUrl = new URL("/redefinir-senha", appUrl);
+    resetUrl.searchParams.set("token", rawToken);
+    try {
+      await sendPasswordReset(env, account.email, resetUrl.toString());
+    } catch (error) {
+      console.error("Could not deliver password-reset email:", error);
+      await db.prepare(
+        "DELETE FROM auth_password_reset_tokens WHERE id = ? AND used_at IS NULL",
+      ).bind(tokenId).run();
+      return genericResponse;
+    }
+    await db.prepare(
+      "DELETE FROM auth_password_reset_tokens WHERE user_id = ? AND id <> ? AND used_at IS NULL",
+    ).bind(account.id, tokenId).run();
+    return genericResponse;
+  }
+
+  if (path === "/api/auth/password-reset/complete" && request.method === "POST") {
+    assertSameOrigin(request);
+    const body = await readJson(request);
+    const rawToken = typeof body["token"] === "string" ? body["token"] : "";
+    const newPassword = typeof body["newPassword"] === "string" ? body["newPassword"] : "";
+    if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken)) throw new ApiError(400, "Link inválido ou expirado");
+    if (newPassword.length < 12 || newPassword.length > 128) {
+      throw new ApiError(400, "A senha deve ter entre 12 e 128 caracteres");
+    }
+    const tokenHash = bytesToBase64Url(await sha256(rawToken));
+    const now = new Date().toISOString();
+    const tokenRow = await db.prepare(
+      `SELECT user_id FROM auth_password_reset_tokens
+       WHERE token_hash = ? AND used_at IS NULL AND expires_at > ? LIMIT 1`,
+    ).bind(tokenHash, now).first<{ user_id: string }>();
+    if (!tokenRow) throw new ApiError(400, "Link inválido ou expirado");
+
+    const redemptionId = crypto.randomUUID();
+    await db.batch([
+      db.prepare(
+        `UPDATE auth_password_reset_tokens SET used_at = ?, redemption_id = ?
+         WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`,
+      ).bind(now, redemptionId, tokenHash, now),
+      db.prepare(
+        `UPDATE auth_users SET password_hash = ?
+         WHERE id = ? AND EXISTS (
+           SELECT 1 FROM auth_password_reset_tokens
+           WHERE token_hash = ? AND redemption_id = ?
+         )`,
+      ).bind(await hashPassword(newPassword), tokenRow.user_id, tokenHash, redemptionId),
+      db.prepare(
+        `DELETE FROM auth_sessions
+         WHERE user_id = ? AND EXISTS (
+           SELECT 1 FROM auth_password_reset_tokens
+           WHERE token_hash = ? AND redemption_id = ?
+         )`,
+      ).bind(tokenRow.user_id, tokenHash, redemptionId),
+    ]);
+    const redeemed = await db.prepare(
+      "SELECT 1 AS redeemed FROM auth_password_reset_tokens WHERE token_hash = ? AND redemption_id = ? LIMIT 1",
+    ).bind(tokenHash, redemptionId).first();
+    if (!redeemed) throw new ApiError(400, "Link inválido ou expirado");
     return json({ ok: true });
   }
 
@@ -940,13 +1083,113 @@ async function chatSendHandler(request: Request, db: D1Database, env: WorkerEnv,
   });
 }
 
+async function emailPreferencesHandler(request: Request, db: D1Database, user: AuthUser) {
+  if (request.method === "GET") {
+    const preference = await db.prepare(
+      "SELECT daily_activity_enabled FROM email_preferences WHERE user_id = ? LIMIT 1",
+    ).bind(user.id).first<{ daily_activity_enabled: number }>();
+    return json({ dailyActivityEnabled: preference?.daily_activity_enabled !== 0 });
+  }
+  if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+  assertSameOrigin(request);
+  const body = await readJson(request);
+  if (typeof body["dailyActivityEnabled"] !== "boolean") {
+    throw new ApiError(400, "Invalid email preference");
+  }
+  await db.prepare(
+    `INSERT INTO email_preferences (user_id, daily_activity_enabled, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT (user_id) DO UPDATE SET
+       daily_activity_enabled = excluded.daily_activity_enabled,
+       updated_at = excluded.updated_at`,
+  ).bind(user.id, body["dailyActivityEnabled"] ? 1 : 0, new Date().toISOString()).run();
+  return json({ dailyActivityEnabled: body["dailyActivityEnabled"] });
+}
+
+type DigestActivityRow = {
+  user_id: string;
+  email: string;
+  user_name: string;
+  activities_json: string;
+};
+
+export async function handleDailyActivityDigest(rawEnv: unknown, scheduledTime = Date.now()) {
+  if (!rawEnv || typeof rawEnv !== "object") throw new ApiError(503, "Worker bindings are not available");
+  const env = rawEnv as WorkerEnv;
+  const db = requireDb(env);
+  const end = new Date(scheduledTime);
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  const digestDate = end.toISOString().slice(0, 10);
+  const grouped = new Map<string, { email: string; userName: string; activities: DailyActivity[] }>();
+  let offset = 0;
+  while (true) {
+    const rows = await db.prepare(
+    `SELECT n.user_id, u.email, COALESCE(p.nick, '') AS user_name,
+       json_group_array(json_object(
+         'actor', COALESCE(actor.nick, ''),
+         'body', n.body,
+         'createdAt', n.created_at
+       )) AS activities_json
+     FROM notifications n
+     JOIN auth_users u ON u.id = n.user_id
+     LEFT JOIN profiles p ON p.id = n.user_id
+     LEFT JOIN profiles actor ON actor.id = n.actor_id
+     LEFT JOIN email_preferences pref ON pref.user_id = n.user_id
+     WHERE COALESCE(pref.daily_activity_enabled, 1) = 1
+       AND julianday(n.created_at) >= julianday(?)
+       AND julianday(n.created_at) < julianday(?)
+     GROUP BY n.user_id, u.email, p.nick
+     ORDER BY n.user_id
+     LIMIT 1000 OFFSET ?`,
+    ).bind(start.toISOString(), end.toISOString(), offset).all<DigestActivityRow>();
+    const page = rows.results ?? [];
+    for (const row of page) {
+      let activities: DailyActivity[];
+      try {
+        activities = JSON.parse(row.activities_json) as DailyActivity[];
+      } catch (error) {
+        console.error(`Could not decode daily activity digest for user ${row.user_id}:`, error);
+        throw new ApiError(500, "Could not prepare daily activity digest");
+      }
+      grouped.set(row.user_id, {
+        email: row.email,
+        userName: row.user_name,
+        activities,
+      });
+    }
+    if (page.length < 1000) break;
+    offset += page.length;
+  }
+
+  let sent = 0;
+  for (const [userId, digest] of grouped) {
+    const claim = await db.prepare(
+      `INSERT INTO email_daily_digest_sends (user_id, digest_date, sent_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT (user_id, digest_date) DO NOTHING
+       RETURNING user_id`,
+    ).bind(userId, digestDate, end.toISOString()).first<{ user_id: string }>();
+    if (!claim) continue;
+    try {
+      await sendDailyActivityReport(env, digest.email, digest.userName, digest.activities);
+      sent += 1;
+    } catch (error) {
+      console.error(`Could not send daily activity digest for user ${userId}:`, error);
+      await db.prepare(
+        "DELETE FROM email_daily_digest_sends WHERE user_id = ? AND digest_date = ?",
+      ).bind(userId, digestDate).run();
+    }
+  }
+  console.info(`Daily activity digest completed: ${sent} sent, ${grouped.size} eligible users`);
+}
+
 export async function handleWorkerApi(request: Request, rawEnv: unknown) {
   try {
     if (!rawEnv || typeof rawEnv !== "object") throw new ApiError(503, "Worker bindings are not available");
     const env = rawEnv as WorkerEnv;
     const db = requireDb(env);
     const path = new URL(request.url).pathname;
-    if (path.startsWith("/api/auth/")) return await authHandler(request, db, path);
+    if (path.startsWith("/api/auth/")) return await authHandler(request, db, env, path);
     const user = await getUser(request, db);
     if (!user) throw new ApiError(401, "Authentication required");
     if (path === "/api/chat/unread" || path === "/api/chat/read") {
@@ -955,6 +1198,7 @@ export async function handleWorkerApi(request: Request, rawEnv: unknown) {
     if (path === "/api/chat/conversation") return await chatConversationHandler(request, db, user);
     if (path === "/api/chat/delete") return await chatDeleteHandler(request, db, user);
     if (path === "/api/chat/send") return await chatSendHandler(request, db, env, user);
+    if (path === "/api/email/preferences") return await emailPreferencesHandler(request, db, user);
     if (path === "/api/vip/activate") return await activatePrototypeVip(request, db, user);
     if (path === "/api/data") return await dataHandler(request, db, user);
     if (path === "/api/media") return await mediaHandler(request, db, env, user);

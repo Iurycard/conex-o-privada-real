@@ -19,7 +19,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useState, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import {
@@ -268,6 +268,9 @@ function SettingsPage() {
   const [albumsOpen, setAlbumsOpen] = useState(false);
   const [visitsOpen, setVisitsOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [dailyActivityEmails, setDailyActivityEmails] = useState(true);
+  const [emailPreferenceLoading, setEmailPreferenceLoading] = useState(true);
+  const [emailPreferenceSaving, setEmailPreferenceSaving] = useState(false);
 
   const privateAlbum = current?.private_album ?? [];
   const privateAlbumUrls = useAlbumUrls(privateAlbum);
@@ -278,6 +281,31 @@ function SettingsPage() {
         .map((id) => profiles.find((profile) => profile.id === id))
         .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile))
     : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadEmailPreference() {
+      if (!user) {
+        setEmailPreferenceLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch("/api/email/preferences", { credentials: "same-origin" });
+        const payload = await response.json() as { dailyActivityEnabled?: boolean; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "Não foi possível carregar a preferência");
+        if (!cancelled) setDailyActivityEmails(payload.dailyActivityEnabled ?? true);
+      } catch (error) {
+        console.error("Erro ao carregar preferência de resumo diário:", error);
+        if (!cancelled) toast.error("Não foi possível carregar as preferências de e-mail");
+      } finally {
+        if (!cancelled) setEmailPreferenceLoading(false);
+      }
+    }
+    void loadEmailPreference();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   //Trava de segurança
   if (!current) {
@@ -337,6 +365,27 @@ function SettingsPage() {
   };
 
   const showPrototype = (label: string) => toast(`${label}: recurso em demonstração`);
+
+  const saveDailyActivityPreference = async (enabled: boolean) => {
+    setEmailPreferenceSaving(true);
+    try {
+      const response = await fetch("/api/email/preferences", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dailyActivityEnabled: enabled }),
+      });
+      const payload = await response.json() as { dailyActivityEnabled?: boolean; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Não foi possível salvar a preferência");
+      setDailyActivityEmails(payload.dailyActivityEnabled ?? enabled);
+      toast.success(enabled ? "Resumo diário por e-mail ativado" : "Resumo diário por e-mail desativado");
+    } catch (error) {
+      console.error("Erro ao salvar preferência de resumo diário:", error);
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar a preferência");
+    } finally {
+      setEmailPreferenceSaving(false);
+    }
+  };
 
   if (location.pathname === "/configuracoes/amigos" || location.pathname === "/configuracoes/privacidade" || location.pathname === "/configuracoes/bloqueados") {
     return (
@@ -418,6 +467,24 @@ function SettingsPage() {
                 />
               );
             })}
+          </SettingsSection>
+
+          <SettingsSection title="Notificações por e-mail">
+            <div className="flex min-h-16 items-center gap-3 px-4 py-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted-foreground">
+                <Mail className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">Resumo diário de atividades</p>
+                <p className="text-xs text-muted-foreground">Receba um e-mail diário com curtidas, comentários, seguidores e outras atividades do perfil.</p>
+              </div>
+              <Switch
+                checked={dailyActivityEmails}
+                disabled={emailPreferenceLoading || emailPreferenceSaving}
+                onCheckedChange={(enabled) => void saveDailyActivityPreference(enabled)}
+                aria-label="Receber resumo diário de atividades por e-mail"
+              />
+            </div>
           </SettingsSection>
 
           <SettingsSection title="Aparência">

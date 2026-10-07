@@ -2,7 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { handleWorkerApi } from "./lib/d1-api";
+import { handleDailyActivityDigest, handleWorkerApi } from "./lib/d1-api";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -67,5 +67,12 @@ export default {
         headers: { "content-type": "text/html; charset=utf-8" },
       });
     }
+  },
+  scheduled(event: { scheduledTime: number }, env: unknown, ctx: { waitUntil: (promise: Promise<unknown>) => void }) {
+    const digest = handleDailyActivityDigest(getWorkerEnv(env), event.scheduledTime).catch((error: unknown) => {
+      console.error("Daily activity digest cron failed:", error);
+      throw error;
+    });
+    ctx.waitUntil(digest);
   },
 };

@@ -14,3 +14,6 @@ bucket_name = "coexaoprivada"
 
 [observability]
 enabled = true
+
+[triggers]
+crons = ["0 9 * * *"]  # Executa todo dia às 9h (UTC)

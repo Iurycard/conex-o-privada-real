@@ -53,7 +53,22 @@ function LoginPage() {
     navigate({ to: "/feed" });
   };
 
-  const sendPasswordReset = () => toast.error("A recuperação exige configurar um provedor de e-mail");
+  const sendPasswordReset = async () => {
+    if (!email.trim()) {
+      toast.error("Informe seu e-mail para receber o link de redefinição");
+      return;
+    }
+    setBusy(true);
+    const { error } = await authRequest("/api/auth/password-reset/request", {
+      email: email.trim(),
+    });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message || "Não foi possível solicitar a redefinição");
+      return;
+    }
+    toast.success("Se o e-mail estiver cadastrado, você receberá instruções para redefinir sua senha.");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -86,7 +101,7 @@ function LoginPage() {
         <button type="button" onClick={() => void signIn()} disabled={busy} className="mt-7 w-full rounded-full bg-gradient-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-neon disabled:opacity-60">
           {busy ? "Entrando…" : "Entrar"}
         </button>
-        <button type="button" onClick={sendPasswordReset} className="mt-3 w-full text-center text-xs font-medium text-primary-glow hover:underline">
+        <button type="button" onClick={() => void sendPasswordReset()} disabled={busy} className="mt-3 w-full text-center text-xs font-medium text-primary-glow hover:underline disabled:opacity-60">
           Esqueci minha senha
         </button>
         <p className="mt-8 text-center text-sm text-muted-foreground">

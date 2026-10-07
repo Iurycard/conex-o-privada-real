@@ -38,6 +38,26 @@ CREATE TABLE IF NOT EXISTS auth_login_attempts (
   blocked_until DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS auth_password_reset_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME,
+  redemption_id TEXT,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS auth_password_reset_tokens_user_idx
+  ON auth_password_reset_tokens (user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS auth_password_reset_requests (
+  email_hash TEXT PRIMARY KEY,
+  request_count INTEGER NOT NULL DEFAULT 0,
+  window_started_at DATETIME NOT NULL,
+  last_requested_at DATETIME NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS auth_sessions_user_idx ON auth_sessions (user_id);
 CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions (expires_at);
 
@@ -113,6 +133,21 @@ CREATE TABLE IF NOT EXISTS notifications (
   body TEXT NOT NULL DEFAULT '',
   read INTEGER NOT NULL DEFAULT 0 CHECK (read IN (0, 1)),
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS notifications_created_at_idx ON notifications (julianday(created_at));
+
+CREATE TABLE IF NOT EXISTS email_preferences (
+  user_id TEXT PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
+  daily_activity_enabled INTEGER NOT NULL DEFAULT 1 CHECK (daily_activity_enabled IN (0, 1)),
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS email_daily_digest_sends (
+  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+  digest_date TEXT NOT NULL,
+  sent_at DATETIME NOT NULL,
+  PRIMARY KEY (user_id, digest_date)
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
