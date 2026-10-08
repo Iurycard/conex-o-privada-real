@@ -43,7 +43,7 @@ export function VipProvider({ children }: { children: ReactNode }) {
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data, error }) => {
-        if (active && !error) setVip(data?.vip ?? false);
+        if (active && !error) setVip(Boolean((data as { vip?: boolean } | null)?.vip));
       });
 
     return () => {
