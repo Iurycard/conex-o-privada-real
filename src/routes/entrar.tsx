@@ -16,7 +16,9 @@ export const Route = createFileRoute("/entrar")({
       { property: "og:description", content: "Acesse sua conta discreta da Conexão Privada." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:url", content: "https://www.conexaoprivada.site/entrar" },
     ],
+    links: [{ rel: "canonical", href: "https://www.conexaoprivada.site/entrar" }],
   }),
   component: LoginPage,
 });

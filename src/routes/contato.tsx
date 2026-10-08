@@ -2,6 +2,17 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 
 export const Route = createFileRoute("/contato")({
+  head: () => ({
+    meta: [
+      { title: "Contato — Conexão Privada" },
+      { name: "description", content: "Fale com o suporte da Conexão Privada: dúvidas, denúncias e solicitações." },
+      { property: "og:title", content: "Contato — Conexão Privada" },
+      { property: "og:description", content: "Fale com o suporte da Conexão Privada." },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://www.conexaoprivada.site/contato" },
+    ],
+    links: [{ rel: "canonical", href: "https://www.conexaoprivada.site/contato" }],
+  }),
   component: ContactPage,
 });
 

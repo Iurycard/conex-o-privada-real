@@ -24,7 +24,9 @@ export const Route = createFileRoute("/cadastro")({
       { property: "og:description", content: "Cadastro em poucos passos: tipo de conta, localização, bio e fotos." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:url", content: "https://www.conexaoprivada.site/cadastro" },
     ],
+    links: [{ rel: "canonical", href: "https://www.conexaoprivada.site/cadastro" }],
   }),
   component: SignupPage,
 });
