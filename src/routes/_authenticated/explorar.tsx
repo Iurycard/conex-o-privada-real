@@ -20,6 +20,7 @@ import { useVip } from "@/context/vip";
 export const Route = createFileRoute("/_authenticated/explorar")({
   head: () => ({
     meta: [
+            { name: "robots", content: "noindex" },
       { title: "Explorar perfis — Conexão Privada" },
       {
         name: "description",

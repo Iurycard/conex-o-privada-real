@@ -1,6 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/termos-de-servico")({
+  head: () => ({
+    meta: [
+      { title: "Termos de Serviço — Conexão Privada" },
+      { name: "description", content: "Termos de serviço e política de privacidade da Conexão Privada." },
+      { property: "og:title", content: "Termos de Serviço — Conexão Privada" },
+      { property: "og:description", content: "Termos de serviço e política de privacidade da Conexão Privada." },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://www.conexaoprivada.site/termos-de-servico" },
+    ],
+    links: [{ rel: "canonical", href: "https://www.conexaoprivada.site/termos-de-servico" }],
+  }),
   component: TermsPage,
 });
 

@@ -8,7 +8,10 @@ import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/redefinir-senha")({
   head: () => ({
-    meta: [{ title: "Redefinir senha — Conexão Privada" }],
+    meta: [
+      { title: "Redefinir senha — Conexão Privada" },
+      { name: "robots", content: "noindex" },
+    ],
   }),
   validateSearch: (search: Record<string, unknown>) => ({
     token: typeof search["token"] === "string" ? search["token"] : "",

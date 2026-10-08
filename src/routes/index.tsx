@@ -33,10 +33,10 @@ export const Route = createFileRoute("/")({
         content: "Feed, eventos e chat em um ambiente privado e elegante para casais e solteiros.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "https://cosmic-link-ui.lovable.app/" },
+      { property: "og:url", content: "https://www.conexaoprivada.site/" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "https://cosmic-link-ui.lovable.app/" }],
+    links: [{ rel: "canonical", href: "https://www.conexaoprivada.site/" }],
     scripts: [
       {
         type: "application/ld+json",
@@ -44,7 +44,7 @@ export const Route = createFileRoute("/")({
           "@context": "https://schema.org",
           "@type": "WebSite",
           name: "Conexão Privada",
-          url: "https://cosmic-link-ui.lovable.app/",
+          url: "https://www.conexaoprivada.site/",
           description:
             "Rede social premium +18 com feed, eventos e chat privado para casais e solteiros.",
         }),

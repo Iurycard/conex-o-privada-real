@@ -10,6 +10,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_authenticated/eventos/$id")({
   head: () => ({
     meta: [
+            { name: "robots", content: "noindex" },
       { title: "Detalhes do evento — Conexão Privada" },
       { name: "description", content: "Veja local, data, descrição e quem confirmou presença neste evento." },
       { property: "og:title", content: "Detalhes do evento — Conexão Privada" },
