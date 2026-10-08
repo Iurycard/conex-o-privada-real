@@ -1,5 +1,8 @@
 export type D1Error = { message: string; status?: number };
-export type D1Result<T = Record<string, unknown>> = { data: T | T[] | null; error: D1Error | null; count?: number | null };
+// Rows come from D1 as dynamic JSON; `any` keeps call sites simple.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type D1Row = Record<string, any>;
+export type D1Result<T = D1Row> = { data: T | T[] | null; error: D1Error | null; count?: number | null };
 
 type Filter = { column: string; operator: "eq" | "neq" | "is" | "in"; value: unknown };
 type Order = { column: string; ascending: boolean };
@@ -81,7 +84,7 @@ class D1Query implements PromiseLike<D1Result> {
         }
         data = data[0] ?? null;
       }
-      return { data, error: null, count: payload.count };
+      return { data, error: null, count: payload.count ?? null };
     } catch (error) {
       return { data: null, error: { message: error instanceof Error ? error.message : "Database request failed" } };
     }
@@ -94,12 +97,13 @@ export const d1 = {
 
 export async function authRequest<T>(path: string, body?: unknown): Promise<{ data: T | null; error: D1Error | null }> {
   try {
-    const response = await fetch(path, {
-      method: body === undefined ? "GET" : "POST",
-      credentials: "same-origin",
-      headers: body === undefined ? undefined : { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    const init: RequestInit = { method: "GET", credentials: "same-origin" };
+    if (body !== undefined) {
+      init.method = "POST";
+      init.headers = { "content-type": "application/json" };
+      init.body = JSON.stringify(body);
+    }
+    const response = await fetch(path, init);
     const payload = await response.json() as { user?: T; error?: string; ok?: boolean };
     if (!response.ok) return { data: null, error: { message: payload.error ?? "Authentication request failed", status: response.status } };
     return { data: (payload.user ?? null) as T | null, error: null };
