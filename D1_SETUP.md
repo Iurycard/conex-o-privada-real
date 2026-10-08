@@ -45,7 +45,7 @@ The repository does not contain an export of the four real profiles or productio
 
 Supabase Auth password hashes cannot be exported for reuse. Existing users must create a new D1-backed account and password; there is no Supabase login fallback. Export profile/post/social/event rows separately and map their UUIDs to `TEXT` IDs. Existing Supabase Storage objects must be copied to the R2 bucket and their stored paths updated to the `owner/(public|private)/r2/file.webp` convention.
 
-Users can change their password while signed in after confirming the current password, or request an email reset link from the login screen. Reset links are single-use and expire after one hour; completing a reset invalidates all existing sessions.
+Passwords use PBKDF2-SHA-256 with 100,000 iterations to stay within the Cloudflare Workers Web Crypto limit. Users can change their password while signed in after confirming the current password, or request an email reset link from the login screen. Reset links are single-use and expire after one hour; completing a reset invalidates all existing sessions. Accounts whose password hashes were created with more than 100,000 iterations must use the password-reset flow once; Cloudflare Workers cannot verify those older hashes.
 
 ## First administrator
 

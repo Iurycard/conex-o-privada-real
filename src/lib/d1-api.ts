@@ -39,7 +39,7 @@ type AuthUser = { id: string; email: string; role: string };
 
 const SESSION_COOKIE = "cp_session";
 const SESSION_DAYS = 30;
-const PASSWORD_ITERATIONS = 600_000;
+const PASSWORD_ITERATIONS = 100_000;
 const JSON_COLUMNS = new Set(["looking_for", "public_album", "private_album", "tags"]);
 const BOOLEAN_COLUMNS = new Set(["vip", "read", "verified"]);
 
@@ -119,7 +119,7 @@ async function verifyPassword(password: string, encoded: string) {
   const [algorithm, iterationText, saltText, expectedText] = encoded.split("$");
   if (algorithm !== "pbkdf2-sha256" || !iterationText || !saltText || !expectedText) return false;
   const iterations = Number(iterationText);
-  if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > 1_000_000) return false;
+  if (!Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > PASSWORD_ITERATIONS) return false;
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt: base64UrlToBytes(saltText), iterations },
@@ -372,7 +372,18 @@ async function authHandler(request: Request, db: D1Database, env: WorkerEnv, pat
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new ApiError(400, "Informe um e-mail válido");
     if (password.length < 12 || password.length > 128) throw new ApiError(400, "A senha deve ter entre 12 e 128 caracteres");
     if (!nick || nick.length > 80 || !/^[a-z0-9_]{3,30}$/.test(username)) throw new ApiError(400, "Perfil inválido");
-    if (typeof profile["type"] !== "string" || !TABLE_COLUMNS["profiles"]?.includes("type")) throw new ApiError(400, "Tipo de perfil inválido");
+    if (typeof profile["type"] !== "string") throw new ApiError(400, "Tipo de perfil inválido");
+    const profileType = await db.prepare("SELECT value FROM profile_types WHERE value = ? LIMIT 1")
+      .bind(profile["type"]).first<{ value: string }>();
+    if (!profileType) throw new ApiError(400, "Tipo de perfil não encontrado nas opções disponíveis. Atualize a página e tente novamente.");
+    const requestedOrientation = typeof profile["orientation"] === "string" ? profile["orientation"].trim() : "";
+    const orientation = requestedOrientation
+      ? await db.prepare("SELECT value FROM orientations WHERE lower(value) = lower(?) LIMIT 1")
+        .bind(requestedOrientation).first<{ value: string }>()
+      : null;
+    if (requestedOrientation && !orientation) {
+      throw new ApiError(400, "Orientação não encontrada nas opções disponíveis. Atualize a página e tente novamente.");
+    }
 
     const id = crypto.randomUUID();
     const passwordHash = await hashPassword(password);
@@ -384,7 +395,7 @@ async function authHandler(request: Request, db: D1Database, env: WorkerEnv, pat
       city: typeof profile["city"] === "string" ? profile["city"].slice(0, 120) : "",
       bio: typeof profile["bio"] === "string" ? profile["bio"].slice(0, 2000) : "",
       hue: Number.isInteger(profile["hue"]) ? profile["hue"] as number : 300,
-      orientation: typeof profile["orientation"] === "string" ? profile["orientation"] : null,
+      orientation: orientation?.value ?? null,
       latitude: typeof profile["latitude"] === "number" ? profile["latitude"] : null,
       longitude: typeof profile["longitude"] === "number" ? profile["longitude"] : null,
       looking_for: JSON.stringify(Array.isArray(profile["lookingFor"]) ? profile["lookingFor"].filter((item) => typeof item === "string") : []),

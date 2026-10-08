@@ -18,6 +18,8 @@ import heroImage from "@/assets/hero-landing.jpg";
 import phonesImage from "@/assets/app-phones.jpg";
 import logoImg from "@/assets/logo.png";
 
+const SITE_URL = "https://www.conexaoprivada.site/";
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -33,10 +35,9 @@ export const Route = createFileRoute("/")({
         content: "Feed, eventos e chat em um ambiente privado e elegante para casais e solteiros.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "https://cosmic-link-ui.lovable.app/" },
+      { property: "og:url", content: SITE_URL },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "https://cosmic-link-ui.lovable.app/" }],
     scripts: [
       {
         type: "application/ld+json",
@@ -44,7 +45,7 @@ export const Route = createFileRoute("/")({
           "@context": "https://schema.org",
           "@type": "WebSite",
           name: "Conexão Privada",
-          url: "https://cosmic-link-ui.lovable.app/",
+          url: SITE_URL,
           description:
             "Rede social premium +18 com feed, eventos e chat privado para casais e solteiros.",
         }),

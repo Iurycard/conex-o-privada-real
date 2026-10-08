@@ -39,7 +39,7 @@ function SignupPage() {
   const [selectedUf, setSelectedUf] = useState("");
   const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
   const [cidades, setCidades] = useState<{ id: number; nome: string }[]>([]); 
-  const [orientation, setOrientation] = useState("Heterossexual");
+  const [orientation, setOrientation] = useState("heterossexual");
   const [bio, setBio] = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [lookingFor, setLookingFor] = useState<AccountType[]>([]);
