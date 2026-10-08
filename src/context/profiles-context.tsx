@@ -487,7 +487,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         return ((data ?? []) as { user_id: string }[]).map((comment) => ({
           ...comment,
           profile: profiles.find((profile) => profile.id === comment.user_id),
-        }));
+        })) as PostComment[];
       },
     };
   }, [profiles, posts, currentId, following, blockedIds, likedPostIds, user]);

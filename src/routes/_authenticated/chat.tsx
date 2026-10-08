@@ -237,7 +237,7 @@ function ChatPage() {
       for (const message of (latestMessages ?? []) as ChatMessage[]) {
         const partnerId = partnerByConversation.get(message.conversation_id);
         if (partnerId && previews[partnerId] === undefined) {
-          previews[partnerId] = messagePreview(message, user.id);
+          previews[partnerId] = messagePreview(message, String(user.id));
         }
       }
       setConversationPreviews(previews);
