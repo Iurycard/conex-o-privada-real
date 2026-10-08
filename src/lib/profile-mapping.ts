@@ -16,6 +16,7 @@ export type ProfileRow = {
   looking_for: string[];
   public_album: string[];
   private_album: string[];
+  verified?: boolean;
   latitude?: number | null;
   longitude?: number | null;
 };
@@ -41,6 +42,7 @@ export function rowToProfile(row: ProfileRow) {
     city: row.city || "",
     age: ageFrom(row.birth_date),
     vip: row.vip,
+    verified: row.verified ?? false,
     hue: row.hue ?? 0,
     bio: row.bio || "Perfil recém-criado.",
     ...(row.gender ? { gender: row.gender } : {}),

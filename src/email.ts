@@ -57,6 +57,24 @@ export async function sendPasswordReset(env: EmailEnvironment, to: string, reset
   });
 }
 
+export async function sendSupportTicketReply(
+  env: EmailEnvironment,
+  to: string,
+  userName: string,
+  ticketId: string,
+  reply: string,
+) {
+  const safeName = escapeHtml(userName);
+  const safeTicketId = escapeHtml(ticketId);
+  const safeReply = escapeHtml(reply).replace(/\r?\n/g, "<br>");
+  await sendEmail(env, {
+    to,
+    subject: `Resposta do suporte — solicitação ${ticketId}`,
+    html: `<p>Olá, ${safeName}.</p><p>Recebemos sua solicitação <strong>${safeTicketId}</strong> e nossa equipe respondeu:</p><p>${safeReply}</p>`,
+    text: `Olá, ${userName}.\n\nNossa equipe respondeu à solicitação ${ticketId}:\n\n${reply}`,
+  });
+}
+
 export async function sendDailyActivityReport(
   env: EmailEnvironment,
   to: string,

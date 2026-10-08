@@ -1,6 +1,7 @@
 import {
   sendDailyActivityReport,
   sendPasswordReset,
+  sendSupportTicketReply,
   type DailyActivity,
   type EmailEnvironment,
 } from "@/email";
@@ -40,7 +41,7 @@ const SESSION_COOKIE = "cp_session";
 const SESSION_DAYS = 30;
 const PASSWORD_ITERATIONS = 600_000;
 const JSON_COLUMNS = new Set(["looking_for", "public_album", "private_album", "tags"]);
-const BOOLEAN_COLUMNS = new Set(["vip", "read"]);
+const BOOLEAN_COLUMNS = new Set(["vip", "read", "verified"]);
 
 const TABLE_COLUMNS: Record<string, readonly string[]> = {
   profiles: ["id", "nick", "username", "type", "city", "bio", "gender", "orientation", "birth_date", "hue", "latitude", "longitude", "avatar", "cover", "vip", "looking_for", "public_album", "private_album", "created_at", "updated_at"],
@@ -155,9 +156,15 @@ async function getUser(request: Request, db: D1Database): Promise<AuthUser | nul
   const row = await db.prepare(
     `SELECT u.id, u.email,
       COALESCE((SELECT role FROM user_roles WHERE user_id = u.id AND role = 'admin' LIMIT 1), 'user') AS role
-     FROM auth_sessions s JOIN auth_users u ON u.id = s.user_id
-     WHERE s.token_hash = ? AND s.expires_at > ? LIMIT 1`,
-  ).bind(tokenHash, new Date().toISOString()).first<AuthUser>();
+     FROM auth_sessions s
+     JOIN auth_users u ON u.id = s.user_id
+     LEFT JOIN admin_account_status a ON a.user_id = u.id
+     WHERE s.token_hash = ? AND s.expires_at > ?
+       AND (a.status IS NULL OR a.status = 'active'
+         OR (a.status = 'suspended' AND a.suspended_until IS NOT NULL
+           AND julianday(a.suspended_until) <= julianday(?)))
+     LIMIT 1`,
+  ).bind(tokenHash, new Date().toISOString(), new Date().toISOString()).first<AuthUser>();
   return row;
 }
 
@@ -426,6 +433,18 @@ async function authHandler(request: Request, db: D1Database, env: WorkerEnv, pat
         .bind(emailHash, attempts, windowStarted, blockedUntil).run();
       throw new ApiError(401, "E-mail ou senha incorretos");
     }
+    const accountStatus = await db.prepare(
+      `SELECT status, suspended_until FROM admin_account_status
+       WHERE user_id = ? AND status = 'suspended'
+         AND (suspended_until IS NULL OR julianday(suspended_until) > julianday(?))
+       LIMIT 1`,
+    ).bind(row.id, new Date().toISOString()).first<{ suspended_until: string | null }>();
+    if (accountStatus) {
+      const detail = accountStatus.suspended_until
+        ? `A conta está suspensa até ${accountStatus.suspended_until}`
+        : "A conta está suspensa permanentemente";
+      throw new ApiError(403, detail);
+    }
     await db.prepare("DELETE FROM auth_login_attempts WHERE email_hash = ?").bind(emailHash).run();
     const user = await getUserFromId(db, row.id, row.email);
     const token = await createSession(db, row.id);
@@ -489,6 +508,482 @@ function decodeRow(row: D1Row): D1Row {
   return result;
 }
 
+async function supportTicketHandler(request: Request, db: D1Database) {
+  if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+  assertSameOrigin(request);
+  const body = await readJson(request);
+  const name = typeof body["name"] === "string" ? body["name"].trim() : "";
+  const email = typeof body["email"] === "string" ? body["email"].trim().toLowerCase() : "";
+  const subject = typeof body["subject"] === "string" ? body["subject"].trim() : "";
+  const message = typeof body["message"] === "string" ? body["message"].trim() : "";
+  const category = typeof body["category"] === "string" ? body["category"] : "general";
+  if (!name || name.length > 120) throw new ApiError(400, "Informe um nome válido");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new ApiError(400, "Informe um e-mail válido");
+  if (!subject || subject.length > 160) throw new ApiError(400, "Informe um assunto com até 160 caracteres");
+  if (message.length < 10 || message.length > 5000) throw new ApiError(400, "A solicitação deve ter entre 10 e 5000 caracteres");
+  if (!["general", "account", "billing", "safety"].includes(category)) throw new ApiError(400, "Categoria inválida");
+
+  const rate = await db.prepare(
+    "SELECT COUNT(*) AS count FROM support_tickets WHERE email = ? COLLATE NOCASE AND julianday(created_at) > julianday('now', '-1 hour')",
+  ).bind(email).first<{ count: number }>();
+  if ((rate?.count ?? 0) >= 5) throw new ApiError(429, "Limite de solicitações atingido. Tente novamente mais tarde.");
+
+  const currentUser = await getUser(request, db);
+  const id = crypto.randomUUID();
+  await db.prepare(
+    `INSERT INTO support_tickets (id, user_id, name, email, category, subject, message)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(id, currentUser?.id ?? null, name, email, category, subject, message).run();
+  return json({ id, status: "open" }, 201);
+}
+
+function requireAdmin(user: AuthUser) {
+  if (user.role !== "admin") throw new ApiError(403, "Acesso restrito à administração");
+}
+
+async function writeAdminAudit(
+  db: D1Database,
+  actorId: string,
+  action: string,
+  targetType: string,
+  targetId: string | null,
+  details: unknown = {},
+) {
+  await db.prepare(
+    "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+  ).bind(crypto.randomUUID(), actorId, action, targetType, targetId, JSON.stringify(details ?? {})).run();
+}
+
+function parseAlbum(value: string, field: string) {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) throw new Error();
+    return parsed as string[];
+  } catch {
+    throw new ApiError(500, `Invalid ${field} data`);
+  }
+}
+
+async function adminDashboardHandler(request: Request, db: D1Database, user: AuthUser) {
+  if (request.method !== "GET") throw new ApiError(405, "Method not allowed");
+  requireAdmin(user);
+
+  const [
+    usersCount,
+    reportsCount,
+    postsCount,
+    suspendedCount,
+    vipCount,
+    freeCount,
+    reports,
+    users,
+    mediaProfiles,
+    verificationRequests,
+    tickets,
+    audit,
+    adSetting,
+  ] = await Promise.all([
+    db.prepare("SELECT COUNT(*) AS count FROM auth_users").first<{ count: number }>(),
+    db.prepare("SELECT COUNT(*) AS count FROM reports WHERE status IN ('pending', 'in_review')").first<{ count: number }>(),
+    db.prepare("SELECT COUNT(*) AS count FROM posts").first<{ count: number }>(),
+    db.prepare(
+      `SELECT COUNT(*) AS count FROM admin_account_status
+       WHERE status = 'suspended' AND (suspended_until IS NULL OR julianday(suspended_until) > julianday('now'))`,
+    ).first<{ count: number }>(),
+    db.prepare("SELECT COUNT(*) AS count FROM profiles WHERE vip = 1").first<{ count: number }>(),
+    db.prepare("SELECT COUNT(*) AS count FROM profiles WHERE vip = 0").first<{ count: number }>(),
+    db.prepare(
+      `SELECT r.id, r.reporter_id, reporter.nick AS reporter_name,
+              r.reported_profile_id, reported.nick AS reported_name,
+              r.post_id, post.author_id AS post_author_id, post.text AS post_text,
+              post.image AS post_image, r.reason, r.details, r.status, r.created_at
+       FROM reports r
+       LEFT JOIN profiles reporter ON reporter.id = r.reporter_id
+       LEFT JOIN profiles reported ON reported.id = r.reported_profile_id
+       LEFT JOIN posts post ON post.id = r.post_id
+       WHERE r.status IN ('pending', 'in_review')
+       ORDER BY r.created_at DESC LIMIT 100`,
+    ).all<D1Row>(),
+    db.prepare(
+      `SELECT u.id, u.email, u.created_at, p.nick, p.username, p.avatar, p.vip,
+              CASE WHEN s.status = 'suspended'
+                    AND (s.suspended_until IS NULL OR julianday(s.suspended_until) > julianday('now'))
+                   THEN 'suspended' ELSE 'active' END AS account_status,
+              s.reason AS suspension_reason, s.suspended_until,
+              EXISTS(SELECT 1 FROM verified_profiles v WHERE v.user_id = u.id) AS verified
+       FROM auth_users u
+       LEFT JOIN profiles p ON p.id = u.id
+       LEFT JOIN admin_account_status s ON s.user_id = u.id
+       ORDER BY u.created_at DESC LIMIT 500`,
+    ).all<D1Row>(),
+    db.prepare(
+      "SELECT id, nick, avatar, public_album, private_album FROM profiles ORDER BY updated_at DESC LIMIT 200",
+    ).all<D1Row>(),
+    db.prepare(
+      `SELECT v.id, v.user_id, v.evidence_key, v.status, v.created_at, p.nick, p.username, p.avatar
+       FROM verification_requests v JOIN profiles p ON p.id = v.user_id
+       WHERE v.status = 'pending' ORDER BY v.created_at ASC LIMIT 100`,
+    ).all<D1Row>(),
+    db.prepare(
+      `SELECT id, user_id, name, email, category, subject, message, status, priority, created_at, updated_at
+       FROM support_tickets ORDER BY
+         CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,
+         updated_at DESC LIMIT 100`,
+    ).all<D1Row>(),
+    db.prepare(
+      `SELECT id, actor_id, action, target_type, target_id, details, created_at
+       FROM admin_audit_log ORDER BY created_at DESC LIMIT 50`,
+    ).all<D1Row>(),
+    db.prepare("SELECT value FROM platform_settings WHERE key = 'ads_enabled' LIMIT 1").first<{ value: string }>(),
+  ]);
+
+  const media = (mediaProfiles.results ?? []).flatMap((profile) => {
+    const entries: D1Row[] = [];
+    for (const kind of ["public", "private"] as const) {
+      const album = parseAlbum(String(profile[`${kind}_album`] ?? "[]"), `${kind} album`);
+      for (const key of album) {
+        entries.push({
+          profile_id: profile["id"],
+          nick: profile["nick"],
+          kind,
+          key,
+          created_at: key.match(/\/r2\/(\d+)-/)?.[1] ?? "",
+        });
+      }
+    }
+    return entries;
+  }).sort((left, right) => String(right["created_at"]).localeCompare(String(left["created_at"]))).slice(0, 100);
+
+  const ticketRows = tickets.results ?? [];
+  const ticketIds = ticketRows.map((ticket) => String(ticket["id"]));
+  let ticketMessages: D1Row[] = [];
+  if (ticketIds.length) {
+    const rows = await db.prepare(
+      `SELECT id, ticket_id, author_id, author_role, body, created_at
+       FROM support_ticket_messages WHERE ticket_id IN (${ticketIds.map(() => "?").join(",")})
+       ORDER BY created_at ASC`,
+    ).bind(...ticketIds).all<D1Row>();
+    ticketMessages = rows.results ?? [];
+  }
+  const messagesByTicket = new Map<string, D1Row[]>();
+  for (const message of ticketMessages) {
+    const ticketId = String(message["ticket_id"]);
+    messagesByTicket.set(ticketId, [...(messagesByTicket.get(ticketId) ?? []), message]);
+  }
+
+  return json({
+    stats: {
+      users: usersCount?.count ?? 0,
+      reports: reportsCount?.count ?? 0,
+      posts: postsCount?.count ?? 0,
+      suspended: suspendedCount?.count ?? 0,
+      vip: vipCount?.count ?? 0,
+      free: freeCount?.count ?? 0,
+    },
+    reports: reports.results ?? [],
+    users: users.results ?? [],
+    media,
+    verificationRequests: verificationRequests.results ?? [],
+    tickets: ticketRows.map((ticket) => ({
+      ...ticket,
+      replies: messagesByTicket.get(String(ticket["id"])) ?? [],
+    })),
+    audit: audit.results ?? [],
+    adsEnabled: adSetting?.value === "true",
+  });
+}
+
+async function adminActionHandler(request: Request, db: D1Database, env: WorkerEnv, user: AuthUser) {
+  if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+  requireAdmin(user);
+  assertSameOrigin(request);
+  const body = await readJson(request);
+  const action = typeof body["action"] === "string" ? body["action"] : "";
+  const now = new Date().toISOString();
+
+  if (action === "report_status") {
+    const reportId = typeof body["reportId"] === "string" ? body["reportId"] : "";
+    const status = typeof body["status"] === "string" ? body["status"] : "";
+    if (!reportId || !["pending", "in_review", "resolved", "dismissed"].includes(status)) {
+      throw new ApiError(400, "Invalid report update");
+    }
+    const result = await db.prepare("SELECT id FROM reports WHERE id = ? LIMIT 1")
+      .bind(reportId).first<{ id: string }>();
+    if (!result) throw new ApiError(404, "Report not found");
+    await db.batch([
+      db.prepare("UPDATE reports SET status = ?, updated_at = ? WHERE id = ?").bind(status, now, reportId),
+      db.prepare(
+        "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), user.id, `report_${status}`, "report", reportId, "{}"),
+    ]);
+    return json({ ok: true });
+  }
+
+  if (action === "delete_reported_post") {
+    const reportId = typeof body["reportId"] === "string" ? body["reportId"] : "";
+    const report = await db.prepare("SELECT post_id FROM reports WHERE id = ? LIMIT 1")
+      .bind(reportId).first<{ post_id: string | null }>();
+    if (!report) throw new ApiError(404, "Report not found");
+    if (!report.post_id) throw new ApiError(400, "This report does not reference a post");
+    await db.batch([
+      db.prepare("UPDATE reports SET post_id = NULL, updated_at = ? WHERE post_id = ?")
+        .bind(now, report.post_id),
+      db.prepare("UPDATE reports SET status = 'resolved', updated_at = ? WHERE id = ?")
+        .bind(now, reportId),
+      db.prepare("DELETE FROM posts WHERE id = ?").bind(report.post_id),
+      db.prepare(
+        "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), user.id, "post_deleted_from_report", "post", report.post_id, JSON.stringify({ reportId })),
+    ]);
+    return json({ ok: true });
+  }
+
+  if (action === "account_status") {
+    const targetId = typeof body["userId"] === "string" ? body["userId"] : "";
+    const status = typeof body["status"] === "string" ? body["status"] : "";
+    const reason = typeof body["reason"] === "string" ? body["reason"].trim() : "";
+    const durationDays = body["durationDays"];
+    if (!targetId || !["active", "suspended"].includes(status)) throw new ApiError(400, "Invalid account status");
+    if (targetId === user.id && status === "suspended") throw new ApiError(400, "You cannot suspend your own account");
+    if (status === "suspended" && (reason.length < 5 || reason.length > 500)) {
+      throw new ApiError(400, "Provide a suspension reason between 5 and 500 characters");
+    }
+    const target = await db.prepare(
+      "SELECT 1 AS found FROM auth_users WHERE id = ? LIMIT 1",
+    ).bind(targetId).first();
+    if (!target) throw new ApiError(404, "User not found");
+    const targetAdmin = await db.prepare(
+      "SELECT 1 AS found FROM user_roles WHERE user_id = ? AND role = 'admin' LIMIT 1",
+    ).bind(targetId).first();
+    if (targetAdmin) throw new ApiError(403, "Administrator accounts cannot be suspended here");
+    const sourceReportId = typeof body["reportId"] === "string" ? body["reportId"] : "";
+    if (sourceReportId) {
+      const sourceReport = await db.prepare(
+        "SELECT id FROM reports WHERE id = ? AND reported_profile_id = ? LIMIT 1",
+      ).bind(sourceReportId, targetId).first();
+      if (!sourceReport) throw new ApiError(400, "The report does not target this account");
+    }
+    const allowedDuration = durationDays === null || durationDays === undefined
+      ? null
+      : Number(durationDays);
+    if (status === "suspended" && allowedDuration !== null && ![1, 7, 30, 90].includes(allowedDuration)) {
+      throw new ApiError(400, "Invalid suspension duration");
+    }
+    const suspendedUntil = status === "active" || allowedDuration === null
+      ? null
+      : new Date(Date.now() + allowedDuration * 24 * 60 * 60 * 1000).toISOString();
+    await db.batch([
+      db.prepare(
+        `INSERT INTO admin_account_status (user_id, status, reason, suspended_until, updated_by, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (user_id) DO UPDATE SET status = excluded.status, reason = excluded.reason,
+           suspended_until = excluded.suspended_until, updated_by = excluded.updated_by,
+           updated_at = excluded.updated_at`,
+      ).bind(targetId, status, status === "suspended" ? reason : null, suspendedUntil, user.id, now),
+      ...(status === "suspended"
+        ? [db.prepare("DELETE FROM auth_sessions WHERE user_id = ?").bind(targetId)]
+        : []),
+      ...(sourceReportId && status === "suspended"
+        ? [db.prepare("UPDATE reports SET status = 'resolved', updated_at = ? WHERE id = ?").bind(now, sourceReportId)]
+        : []),
+      db.prepare(
+        "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), user.id, status === "suspended" ? "user_suspended" : "user_reactivated", "user", targetId, JSON.stringify({ reason, suspendedUntil })),
+      ...(sourceReportId && status === "suspended"
+        ? [db.prepare(
+          "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+        ).bind(crypto.randomUUID(), user.id, "report_resolved_by_suspension", "report", sourceReportId, JSON.stringify({ userId: targetId }))]
+        : []),
+    ]);
+    return json({ ok: true, suspendedUntil });
+  }
+
+  if (action === "set_vip") {
+    const targetId = typeof body["userId"] === "string" ? body["userId"] : "";
+    if (!targetId || typeof body["vip"] !== "boolean") throw new ApiError(400, "Invalid VIP update");
+    const result = await db.prepare("SELECT id FROM profiles WHERE id = ? LIMIT 1")
+      .bind(targetId).first<{ id: string }>();
+    if (!result) throw new ApiError(404, "Profile not found");
+    await db.batch([
+      db.prepare("UPDATE profiles SET vip = ?, updated_at = ? WHERE id = ?")
+        .bind(body["vip"] ? 1 : 0, now, targetId),
+      db.prepare(
+        "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), user.id, body["vip"] ? "vip_granted" : "vip_removed", "user", targetId, JSON.stringify({ prototype: true })),
+    ]);
+    return json({ ok: true, prototype: true });
+  }
+
+  if (action === "set_verified") {
+    const targetId = typeof body["userId"] === "string" ? body["userId"] : "";
+    if (!targetId || typeof body["verified"] !== "boolean") throw new ApiError(400, "Invalid verification update");
+    const profile = await db.prepare("SELECT id FROM profiles WHERE id = ? LIMIT 1")
+      .bind(targetId).first<{ id: string }>();
+    if (!profile) throw new ApiError(404, "Profile not found");
+    await db.batch([
+      body["verified"]
+        ? db.prepare(
+        "INSERT INTO verified_profiles (user_id, verified_by, verified_at) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET verified_by = excluded.verified_by, verified_at = excluded.verified_at",
+        ).bind(targetId, user.id, now)
+        : db.prepare("DELETE FROM verified_profiles WHERE user_id = ?").bind(targetId),
+      db.prepare(
+        "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), user.id, body["verified"] ? "profile_verified" : "profile_unverified", "user", targetId, "{}"),
+    ]);
+    return json({ ok: true });
+  }
+
+  if (action === "delete_media") {
+    const profileId = typeof body["profileId"] === "string" ? body["profileId"] : "";
+    const kind = body["kind"] === "public" || body["kind"] === "private" ? body["kind"] : null;
+    const key = typeof body["key"] === "string" ? body["key"] : "";
+    if (!profileId || !kind || !validMediaKey(key) || !key.startsWith(`${profileId}/${kind}/r2/`)) {
+      throw new ApiError(400, "Invalid media reference");
+    }
+    const column = kind === "public" ? "public_album" : "private_album";
+    const profile = await db.prepare(`SELECT ${column} FROM profiles WHERE id = ? LIMIT 1`)
+      .bind(profileId).first<{ public_album?: string; private_album?: string }>();
+    if (!profile) throw new ApiError(404, "Profile not found");
+    const album = parseAlbum(String(profile[column] ?? "[]"), `${kind} album`);
+    if (!album.includes(key)) throw new ApiError(404, "Media not found in this album");
+    if (!env.MEDIA) throw new ApiError(503, "R2 binding MEDIA is not configured");
+    const nextAlbum = album.filter((entry) => entry !== key);
+    await db.batch([
+      db.prepare(`UPDATE profiles SET ${column} = ?, updated_at = ? WHERE id = ?`)
+        .bind(JSON.stringify(nextAlbum), now, profileId),
+      db.prepare(
+        "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(crypto.randomUUID(), user.id, "album_media_deleted", "media", key, JSON.stringify({ profileId, kind })),
+    ]);
+    let cleanupError: string | null = null;
+    try {
+      await env.MEDIA.delete(key);
+    } catch (error) {
+      console.error(`Could not delete moderated media object ${key}:`, error);
+      cleanupError = error instanceof Error ? error.message : "R2 object deletion failed";
+    }
+    return json({ ok: true, cleanupError });
+  }
+
+  if (action === "review_verification") {
+    const requestId = typeof body["requestId"] === "string" ? body["requestId"] : "";
+    const decision = body["decision"] === "approved" || body["decision"] === "rejected" ? body["decision"] : null;
+    const note = typeof body["note"] === "string" ? body["note"].trim().slice(0, 500) : "";
+    if (!requestId || !decision) throw new ApiError(400, "Invalid verification review");
+    if (!env.MEDIA) throw new ApiError(503, "R2 binding MEDIA is not configured");
+    const reviewed = await db.prepare(
+      `UPDATE verification_requests SET status = ?, review_note = ?, reviewed_by = ?, reviewed_at = ?
+       WHERE id = ? AND status = 'pending'
+       RETURNING user_id, evidence_key`,
+    ).bind(decision, note || null, user.id, now, requestId).first<{ user_id: string; evidence_key: string }>();
+    if (!reviewed) throw new ApiError(404, "Pending verification request not found");
+    if (decision === "approved") {
+      await db.prepare(
+        "INSERT INTO verified_profiles (user_id, verified_by, verified_at) VALUES (?, ?, ?) ON CONFLICT (user_id) DO UPDATE SET verified_by = excluded.verified_by, verified_at = excluded.verified_at",
+      ).bind(reviewed.user_id, user.id, now).run();
+    }
+    await writeAdminAudit(db, user.id, `verification_${decision}`, "user", reviewed.user_id, { requestId, note });
+    let cleanupError: string | null = null;
+    try {
+      if (validMediaKey(reviewed.evidence_key)) await env.MEDIA.delete(reviewed.evidence_key);
+    } catch (error) {
+      console.error(`Could not delete verification evidence for request ${requestId}:`, error);
+      cleanupError = error instanceof Error ? error.message : "R2 evidence deletion failed";
+    }
+    return json({ ok: true, cleanupError });
+  }
+
+  if (action === "support_ticket") {
+    const ticketId = typeof body["ticketId"] === "string" ? body["ticketId"] : "";
+    const status = typeof body["status"] === "string" ? body["status"] : "";
+    const priority = typeof body["priority"] === "string" ? body["priority"] : "";
+    const reply = typeof body["reply"] === "string" ? body["reply"].trim() : "";
+    if (!ticketId || !["open", "in_progress", "resolved", "closed"].includes(status)) {
+      throw new ApiError(400, "Invalid ticket status");
+    }
+    if (!["low", "normal", "high", "urgent"].includes(priority)) throw new ApiError(400, "Invalid ticket priority");
+    if (reply.length > 4000) throw new ApiError(400, "Reply is too long");
+    const ticket = await db.prepare(
+      "SELECT id, email, name FROM support_tickets WHERE id = ? LIMIT 1",
+    ).bind(ticketId).first<{ id: string; email: string; name: string }>();
+    if (!ticket) throw new ApiError(404, "Support ticket not found");
+    const ticketStatements: D1Statement[] = [
+      db.prepare("UPDATE support_tickets SET status = ?, priority = ?, updated_at = ? WHERE id = ?")
+        .bind(status, priority, now, ticketId),
+    ];
+    if (reply) {
+      ticketStatements.push(db.prepare(
+        "INSERT INTO support_ticket_messages (id, ticket_id, author_id, author_role, body) VALUES (?, ?, ?, 'admin', ?)",
+      ).bind(crypto.randomUUID(), ticketId, user.id, reply));
+    }
+    ticketStatements.push(db.prepare(
+      "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+    ).bind(crypto.randomUUID(), user.id, "support_ticket_updated", "support_ticket", ticketId, JSON.stringify({ status, priority, replied: Boolean(reply) })));
+    await db.batch(ticketStatements);
+    let emailError: string | null = null;
+    if (reply) {
+      try {
+        await sendSupportTicketReply(env, ticket.email, ticket.name, ticket.id, reply);
+      } catch (error) {
+        console.error(`Support ticket reply email failed for ticket ${ticket.id}:`, error);
+        emailError = error instanceof Error ? error.message : "Email delivery failed";
+      }
+    }
+    return json({ ok: true, emailSent: Boolean(reply) && !emailError, emailError });
+  }
+
+  if (action === "set_ads_enabled") {
+    if (typeof body["enabled"] !== "boolean") throw new ApiError(400, "Invalid ads setting");
+    await db.prepare(
+      `INSERT INTO platform_settings (key, value, updated_by, updated_at) VALUES ('ads_enabled', ?, ?, ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by,
+         updated_at = excluded.updated_at`,
+    ).bind(String(body["enabled"]), user.id, now).run();
+    await writeAdminAudit(db, user.id, "ads_setting_changed", "platform_setting", "ads_enabled", { enabled: body["enabled"] });
+    return json({ ok: true, enabled: body["enabled"], integrated: false });
+  }
+
+  throw new ApiError(400, "Unknown administrative action");
+}
+
+async function verificationRequestHandler(request: Request, db: D1Database, env: WorkerEnv, user: AuthUser) {
+  if (request.method === "GET") {
+    const [verified, pending] = await Promise.all([
+      db.prepare("SELECT 1 AS verified FROM verified_profiles WHERE user_id = ? LIMIT 1")
+        .bind(user.id).first(),
+      db.prepare(
+        "SELECT id, status, created_at, review_note FROM verification_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+      ).bind(user.id).first<D1Row>(),
+    ]);
+    return json({ verified: Boolean(verified), request: pending ?? null });
+  }
+  if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+  assertSameOrigin(request);
+  const body = await readJson(request);
+  const evidenceKey = typeof body["evidenceKey"] === "string" ? body["evidenceKey"] : "";
+  if (!validMediaKey(evidenceKey) || !evidenceKey.startsWith(`${user.id}/private/r2/`)) {
+    throw new ApiError(400, "Invalid verification photo");
+  }
+  const alreadyVerified = await db.prepare(
+    "SELECT 1 AS verified FROM verified_profiles WHERE user_id = ? LIMIT 1",
+  ).bind(user.id).first();
+  if (alreadyVerified) throw new ApiError(409, "This profile is already verified");
+  if (!env.MEDIA) throw new ApiError(503, "R2 binding MEDIA is not configured");
+  if (!(await env.MEDIA.head(evidenceKey))) throw new ApiError(404, "Verification photo not found");
+  const existing = await db.prepare(
+    "SELECT 1 AS found FROM verification_requests WHERE user_id = ? AND status = 'pending' LIMIT 1",
+  ).bind(user.id).first();
+  if (existing) throw new ApiError(409, "You already have a pending verification request");
+  const id = crypto.randomUUID();
+  await db.batch([
+    db.prepare("INSERT INTO verification_requests (id, user_id, evidence_key) VALUES (?, ?, ?)")
+      .bind(id, user.id, evidenceKey),
+    db.prepare(
+      "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
+    ).bind(crypto.randomUUID(), user.id, "verification_requested", "user", user.id, JSON.stringify({ requestId: id })),
+  ]);
+  return json({ id, status: "pending" }, 201);
+}
 function addScope(table: string, action: string, user: AuthUser): { sql: string; values: D1Value[] } {
   if (action !== "select") return { sql: "", values: [] };
   if (table === "notifications") return { sql: "user_id = ?", values: [user.id] };
@@ -549,7 +1044,7 @@ function assertMutationScope(table: string, action: string, row: D1Row, user: Au
   const forbidden = () => { throw new ApiError(403, "Operation not permitted"); };
   if (table === "profiles") {
     if ((action === "insert" || action === "upsert" || action === "update") && row["id"] !== undefined && row["id"] !== user.id) forbidden();
-    if (action === "update" && user.role !== "admin" && "vip" in row) forbidden();
+    if (["insert", "upsert", "update"].includes(action) && "vip" in row) forbidden();
   } else if (table === "posts" && (action === "insert" || action === "upsert" || action === "update") && row["author_id"] !== undefined && row["author_id"] !== user.id) forbidden();
   else if (table === "follows" && ["insert", "upsert"].includes(action) && row["follower_id"] !== user.id) forbidden();
   else if (table === "profile_likes" && ["insert", "upsert"].includes(action) && row["liker_id"] !== user.id) forbidden();
@@ -633,8 +1128,18 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
   if (action === "select") {
     const rawColumns = typeof query.columns === "string" ? query.columns : "*";
     const requested: string[] = rawColumns.includes("profiles!") ? ["*"] : rawColumns.split(",").map((column) => column.trim());
-    if (requested[0] !== "*" && requested.some((column) => !columns.includes(column))) throw new ApiError(400, "Invalid selected column");
-    const projection = requested[0] === "*" ? "*" : requested.join(", ");
+    const invalidSelection = requested.some((column) =>
+      !columns.includes(column) && !(table === "profiles" && column === "verified"),
+    );
+    if (requested[0] !== "*" && invalidSelection) throw new ApiError(400, "Invalid selected column");
+    const selectedColumns = requested.filter((column) => column !== "verified");
+    const hasVirtualVerified = table === "profiles" && (requested[0] === "*" || requested.includes("verified"));
+    const projectionBase = requested[0] === "*"
+      ? (table === "profiles" ? "profiles.*" : "*")
+      : selectedColumns.join(", ");
+    const projection = `${projectionBase}${hasVirtualVerified
+      ? `${projectionBase ? ", " : ""}EXISTS(SELECT 1 FROM verified_profiles v WHERE v.user_id = profiles.id) AS verified`
+      : ""}`;
     const orders = Array.isArray(query.order) ? query.order as { column?: unknown; ascending?: unknown }[] : [];
     const orderBy = orders.map((order) => {
       if (typeof order.column !== "string" || !columns.includes(order.column)) throw new ApiError(400, "Invalid order column");
@@ -650,7 +1155,9 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
     let data = (rows.results ?? []).map(decodeRow);
     if (table === "posts" && rawColumns.includes("profiles!")) {
       data = await Promise.all(data.map(async (post) => {
-        const author = await db.prepare("SELECT * FROM profiles WHERE id = ? LIMIT 1").bind(String(post["author_id"])).first<D1Row>();
+        const author = await db.prepare(
+          "SELECT profiles.*, EXISTS(SELECT 1 FROM verified_profiles v WHERE v.user_id = profiles.id) AS verified FROM profiles WHERE id = ? LIMIT 1",
+        ).bind(String(post["author_id"])).first<D1Row>();
         return { ...post, profiles: author ? decodeRow(author) : null };
       }));
     }
@@ -736,6 +1243,10 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
 
   const values = query.values && typeof query.values === "object" && !Array.isArray(query.values) ? query.values as D1Row : {};
   assertMutationScope(table, action, values, user);
+  if (table === "reports" && action !== "insert") throw new ApiError(403, "Use the administrative moderation endpoint");
+  if (table === "profiles" && action === "update" && "vip" in values) {
+    throw new ApiError(403, "VIP status can only be changed through the administrative endpoint");
+  }
   if (table === "reports" && user.role !== "admin") throw new ApiError(403, "Operation not permitted");
   const mutationScope = action === "update" ? ({
     profiles: user.role === "admin" ? null : ["id = ?", [user.id]],
@@ -813,6 +1324,18 @@ async function mediaHandler(request: Request, db: D1Database, env: WorkerEnv, us
   }
   if (request.method !== "GET") throw new ApiError(405, "Method not allowed");
   if (kind === "private" && ownerId !== user.id) {
+    if (user.role === "admin") {
+      const object = await bucket.get(key);
+      if (!object) return new Response("Not found", { status: 404 });
+      const headers = new Headers();
+      object.writeHttpMetadata?.(headers);
+      headers.set("cache-control", "private, no-store");
+      headers.set("vary", "Cookie");
+      headers.set("x-content-type-options", "nosniff");
+      const body = await new Response(object.body).arrayBuffer();
+      headers.set("content-length", String(body.byteLength));
+      return new Response(body, { headers });
+    }
     const viewer = await db.prepare("SELECT vip FROM profiles WHERE id = ?").bind(user.id).first<{ vip: number }>();
     const approved = viewer?.vip ? await db.prepare("SELECT 1 AS allowed FROM album_access_requests WHERE requester_id = ? AND owner_id = ? AND status = 'approved' LIMIT 1")
       .bind(user.id, ownerId).first() : null;
@@ -1190,8 +1713,12 @@ export async function handleWorkerApi(request: Request, rawEnv: unknown) {
     const db = requireDb(env);
     const path = new URL(request.url).pathname;
     if (path.startsWith("/api/auth/")) return await authHandler(request, db, env, path);
+    if (path === "/api/support/tickets") return await supportTicketHandler(request, db);
     const user = await getUser(request, db);
     if (!user) throw new ApiError(401, "Authentication required");
+    if (path === "/api/admin/dashboard") return await adminDashboardHandler(request, db, user);
+    if (path === "/api/admin/action") return await adminActionHandler(request, db, env, user);
+    if (path === "/api/verification/request") return await verificationRequestHandler(request, db, env, user);
     if (path === "/api/chat/unread" || path === "/api/chat/read") {
       return await chatUnreadHandler(request, db, user, path);
     }

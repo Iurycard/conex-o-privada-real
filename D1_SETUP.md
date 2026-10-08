@@ -15,7 +15,7 @@ Keep binding names `DB` and `MEDIA`; the Worker reads those names.
 
 Run `npm run dev` to build the Worker, initialize and seed local D1, and start Wrangler on port 8080. The CLI and Worker share `.wrangler/state`, so local registration and testing use the same database and do not write to Cloudflare resources. The schema and seed commands are safe to rerun.
 
-The separate `npm run db:init` and `npm run db:seed` commands explicitly apply the schema and fixtures to the configured remote D1 database. Apply `npm run db:init` before deploying schema changes; it creates the per-conversation read state and per-user conversation deletion state, password-reset tables, and email preference/digest tables. Deploy with `npm run build` followed by `npm run cf:deploy`; the Cloudflare commands use Nitro's generated Worker config so its static-assets binding is included.
+The separate `npm run db:init` and `npm run db:seed` commands explicitly apply the schema and fixtures to the configured remote D1 database. Apply `npm run db:init` before deploying schema changes; it creates the per-conversation read state and per-user conversation deletion state, password-reset tables, email preference/digest tables, and administration/support tables. The admin additions include account suspensions, verified profiles and requests, support tickets and replies, platform settings, and the audit log. Deploy with `npm run build` followed by `npm run cf:deploy`; the Cloudflare commands use Nitro's generated Worker config so its static-assets binding is included.
 
 ## Resend email and password recovery
 
@@ -36,6 +36,8 @@ Before deploying, apply the schema with `npm run db:init`, then build and deploy
 In Cloudflare DNS, add the SPF/DKIM records Resend provides and configure DMARC for the sending domain. Confirm the domain shows as verified in Resend.
 
 The Worker cron is configured for `0 9 * * *` (09:00 UTC daily, 06:00 in São Paulo). It summarizes notification activity from the preceding 24 hours and sends only when there is activity. Existing and new users receive daily summaries by default; users can turn them off under **Configurações > Notificações por e-mail**. Each user is sent at most one digest per UTC date.
+
+Support replies from `/admin` also use Resend. Configure `RESEND_API_KEY` as an encrypted secret and `EMAIL_FROM` as a verified sender before using the reply action. Ticket creation itself is persisted in D1 and does not require an email client.
 
 ## Existing account and media migration
 

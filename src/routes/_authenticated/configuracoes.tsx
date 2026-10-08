@@ -11,7 +11,6 @@ import {
   MessageCircle,
   Mail,
   MoonStar,
-  Phone,
   Shield,
   Star,
   Newspaper,
@@ -86,7 +85,6 @@ const general = [
 const security = [
   { icon: Key, label: "Alterar senha", description: "Mantenha sua conta protegida" },
   { icon: Mail, label: "Alterar email", description: "Atualize seu endereço de acesso" },
-  { icon: Phone, label: "Alterar telefone", description: "Gerencie o telefone cadastrado" },
 ];
 
 const others = [
@@ -271,6 +269,12 @@ function SettingsPage() {
   const [dailyActivityEmails, setDailyActivityEmails] = useState(true);
   const [emailPreferenceLoading, setEmailPreferenceLoading] = useState(true);
   const [emailPreferenceSaving, setEmailPreferenceSaving] = useState(false);
+  const [verification, setVerification] = useState<{
+    verified: boolean;
+    request: { id: string; status: string; created_at: string; review_note?: string | null } | null;
+  }>({ verified: false, request: null });
+  const [verificationLoading, setVerificationLoading] = useState(true);
+  const [verificationSaving, setVerificationSaving] = useState(false);
 
   const privateAlbum = current?.private_album ?? [];
   const privateAlbumUrls = useAlbumUrls(privateAlbum);
@@ -302,6 +306,35 @@ function SettingsPage() {
       }
     }
     void loadEmailPreference();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadVerification() {
+      if (!user) {
+        setVerificationLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch("/api/verification/request", { credentials: "same-origin" });
+        const payload = await response.json() as {
+          verified?: boolean;
+          request?: { id: string; status: string; created_at: string; review_note?: string | null } | null;
+          error?: string;
+        };
+        if (!response.ok) throw new Error(payload.error ?? "Não foi possível carregar a verificação");
+        if (!cancelled) setVerification({ verified: Boolean(payload.verified), request: payload.request ?? null });
+      } catch (error) {
+        console.error("Erro ao carregar status de verificação:", error);
+        if (!cancelled) toast.error("Não foi possível carregar o status de verificação");
+      } finally {
+        if (!cancelled) setVerificationLoading(false);
+      }
+    }
+    void loadVerification();
     return () => {
       cancelled = true;
     };
@@ -355,6 +388,59 @@ function SettingsPage() {
     event.target.value = "";
   }
 };
+
+  const submitVerification = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const evidence = new FormData(form).get("verification-photo");
+    if (!(evidence instanceof File) || !evidence.size) {
+      toast.error("Selecione uma foto para enviar");
+      return;
+    }
+    if (!user) {
+      toast.error("Entre na sua conta para solicitar a verificação");
+      return;
+    }
+    setVerificationSaving(true);
+    let evidenceKey: string | undefined;
+    try {
+      [evidenceKey] = await uploadAlbumPhotos(user.id, "private", [evidence]);
+      if (!evidenceKey) throw new Error("Não foi possível enviar a foto");
+      const response = await fetch("/api/verification/request", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ evidenceKey }),
+      });
+      const payload = await response.json() as { id?: string; status?: string; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Não foi possível solicitar a verificação");
+      setVerification((currentState) => ({
+        ...currentState,
+        request: {
+          id: payload.id ?? "",
+          status: payload.status ?? "pending",
+          created_at: new Date().toISOString(),
+        },
+      }));
+      form.reset();
+      toast.success("Solicitação enviada para análise");
+    } catch (error) {
+      if (evidenceKey) {
+        try {
+          await removeAlbumPhoto(evidenceKey);
+        } catch (cleanupError) {
+          console.error("Não foi possível remover a foto de verificação não enviada:", cleanupError);
+          toast.error("Não foi possível enviar a solicitação e houve uma falha ao limpar a foto temporária");
+          setVerificationSaving(false);
+          return;
+        }
+      }
+      console.error("Erro ao enviar solicitação de verificação:", error);
+      toast.error(error instanceof Error ? error.message : "Não foi possível solicitar a verificação");
+    } finally {
+      setVerificationSaving(false);
+    }
+  };
   const removePhoto = async (index: number) => {
     const saved = await updatePrivateAlbum(privateAlbum.filter((_, photoIndex) => photoIndex !== index));
     if (!saved) {
@@ -463,7 +549,7 @@ function SettingsPage() {
                   key={item.label}
                   icon={Icon}
                   {...rest}
-                  onClick={() => item.label === "Alterar senha" ? navigate({ to: "/redefinir-senha" }) : showPrototype(item.label)}
+                  onClick={() => item.label === "Alterar senha" ? navigate({ to: "/redefinir-senha" } as never) : showPrototype(item.label)}
                 />
               );
             })}
@@ -484,6 +570,42 @@ function SettingsPage() {
                 onCheckedChange={(enabled) => void saveDailyActivityPreference(enabled)}
                 aria-label="Receber resumo diário de atividades por e-mail"
               />
+            </div>
+          </SettingsSection>
+
+          <SettingsSection title="Verificação do perfil">
+            <div className="space-y-4 px-4 py-4">
+              {verificationLoading ? (
+                <p className="text-sm text-muted-foreground">Carregando status…</p>
+              ) : verification.verified ? (
+                <p className="text-sm text-sky-300">Seu perfil está verificado.</p>
+              ) : verification.request?.status === "pending" ? (
+                <p className="text-sm text-amber-300">Sua solicitação está aguardando análise da equipe.</p>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Envie uma foto recente para a equipe comparar com as fotos do seu perfil. A imagem de verificação fica privada e é removida após a análise.
+                  </p>
+                  <form onSubmit={(event) => void submitVerification(event)} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <input
+                      name="verification-photo"
+                      type="file"
+                      accept="image/*"
+                      required
+                      className="min-w-0 flex-1 text-xs text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-surface-2 file:px-3 file:py-2 file:text-foreground"
+                    />
+                    <Button type="submit" disabled={verificationSaving}>
+                      {verificationSaving ? "Enviando…" : "Solicitar verificação"}
+                    </Button>
+                  </form>
+                  {verification.request?.status === "rejected" && (
+                    <p className="text-xs text-muted-foreground">
+                      Sua solicitação anterior foi recusada. Você pode enviar uma nova foto.
+                      {verification.request.review_note ? ` Motivo: ${verification.request.review_note}` : ""}
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           </SettingsSection>
 

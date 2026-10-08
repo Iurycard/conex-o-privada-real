@@ -17,6 +17,7 @@ export type ProfileRow = {
   looking_for: string[];
   public_album: string[];
   private_album: string[];
+  verified?: boolean;
   created_at: string;
   updated_at: string;
 };

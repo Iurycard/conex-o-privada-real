@@ -288,6 +288,90 @@ CREATE TABLE IF NOT EXISTS reports (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS admin_account_status (
+  user_id TEXT PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+  reason TEXT,
+  suspended_until DATETIME,
+  updated_by TEXT REFERENCES auth_users(id) ON DELETE SET NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS verified_profiles (
+  user_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+  verified_by TEXT REFERENCES auth_users(id) ON DELETE SET NULL,
+  verified_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS verification_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  evidence_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  review_note TEXT,
+  reviewed_by TEXT REFERENCES auth_users(id) ON DELETE SET NULL,
+  reviewed_at DATETIME,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS verification_requests_one_pending_idx
+  ON verification_requests (user_id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS verification_requests_status_created_idx
+  ON verification_requests (status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES auth_users(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'general',
+  subject TEXT NOT NULL,
+  message TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+  priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS support_tickets_status_updated_idx
+  ON support_tickets (status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS support_tickets_email_created_idx
+  ON support_tickets (email, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS support_ticket_messages (
+  id TEXT PRIMARY KEY,
+  ticket_id TEXT NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+  author_id TEXT REFERENCES auth_users(id) ON DELETE SET NULL,
+  author_role TEXT NOT NULL CHECK (author_role IN ('admin', 'user')),
+  body TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS support_ticket_messages_ticket_idx
+  ON support_ticket_messages (ticket_id, created_at);
+
+CREATE TABLE IF NOT EXISTS platform_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_by TEXT REFERENCES auth_users(id) ON DELETE SET NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO platform_settings (key, value) VALUES ('ads_enabled', 'false');
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id TEXT PRIMARY KEY,
+  actor_id TEXT REFERENCES auth_users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT,
+  details TEXT NOT NULL DEFAULT '{}',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS admin_audit_log_created_idx
+  ON admin_audit_log (created_at DESC);
+
 CREATE TABLE IF NOT EXISTS message_attachments (
   id TEXT PRIMARY KEY,
   message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,

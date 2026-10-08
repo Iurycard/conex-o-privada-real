@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AvatarOrb, MediaBlock, TypeBadge, VipBadge } from "@/components/bits";
+import { AvatarOrb, MediaBlock, TypeBadge, VerifiedBadge, VipBadge } from "@/components/bits";
 import { PostCard } from "@/routes/_authenticated/feed";
 import { openPostComposer } from "@/components/app-shell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -388,6 +388,7 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             {profile.nick}
           </Link>
           {vip && <VipBadge />}
+          {profile.verified && <VerifiedBadge />}
         </div>
         <div className="mt-2 flex justify-center">
           <TypeBadge type={profile.type} />
