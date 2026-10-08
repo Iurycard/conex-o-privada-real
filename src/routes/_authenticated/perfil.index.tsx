@@ -6,6 +6,7 @@ import { useProfiles } from "@/context/profiles-context";
 export const Route = createFileRoute("/_authenticated/perfil/")({
   head: () => ({
     meta: [
+            { name: "robots", content: "noindex" },
       { title: "Meu perfil — Conexão Privada" },
       { name: "description", content: "Seu perfil com métricas, linha do tempo, álbum público e álbum privado protegido." },
       { property: "og:title", content: "Meu perfil — Conexão Privada" },

@@ -10,6 +10,7 @@ import { useVip } from "@/context/vip";
 export const Route = createFileRoute("/_authenticated/notificacoes")({
   head: () => ({
     meta: [
+            { name: "robots", content: "noindex" },
       { title: "Notificações — Conexão Privada" },
       { name: "description", content: "Curtidas, novos seguidores, convites de eventos e mensagens do seu perfil." },
       { property: "og:title", content: "Notificações — Conexão Privada" },

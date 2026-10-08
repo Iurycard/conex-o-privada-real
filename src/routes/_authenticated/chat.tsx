@@ -23,6 +23,7 @@ import { useUnreadMessages } from "@/hooks/use-unread-messages";
 export const Route = createFileRoute("/_authenticated/chat")({
   head: () => ({
     meta: [
+            { name: "robots", content: "noindex" },
       { title: "Chat — Conexão Privada" },
       { name: "description", content: "Conversas privadas com regras claras entre perfis Free e VIP." },
     ],

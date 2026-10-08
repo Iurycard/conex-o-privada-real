@@ -29,6 +29,7 @@ import {
 export const Route = createFileRoute("/_authenticated/feed")({
   head: () => ({
     meta: [
+            { name: "robots", content: "noindex" },
       { title: "Feed — Conexão Privada" },
       {
         name: "description",
