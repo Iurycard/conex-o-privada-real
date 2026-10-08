@@ -235,7 +235,7 @@ function ChatPage() {
 
       const previews: Record<string, string> = {};
       for (const message of (latestMessages ?? []) as ChatMessage[]) {
-        const partnerId = partnerByConversation.get(message.conversation_id);
+        const partnerId = partnerByConversation.get(String(message.conversation_id ?? ""));
         if (partnerId && previews[partnerId] === undefined) {
           previews[partnerId] = messagePreview(message, String(user.id));
         }
