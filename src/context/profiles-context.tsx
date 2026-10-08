@@ -123,13 +123,13 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
       .from("post_likes")
       .select("post_id")
       .eq("user_id", user.id);
-    setLikedPostIds(new Set((likesData ?? []).map((like) => like.post_id)));
+    setLikedPostIds(new Set(((likesData ?? []) as { post_id: string }[]).map((like) => like.post_id)));
 
     const { data: blockedData, error: blockedError } = await d1
       .from("user_blocks")
       .select("blocked_id")
       .eq("blocker_id", user.id);
-    if (!blockedError) setBlockedIds((blockedData ?? []).map((row) => row.blocked_id));
+    if (!blockedError) setBlockedIds(((blockedData ?? []) as { blocked_id: string }[]).map((row) => row.blocked_id));
 
     if (user) {
       const { data: followsData } = await d1
@@ -462,7 +462,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
         if (error || !data) return false;
 
         setPosts((list) => list.map((post) =>
-          post.id === data.post_id ? { ...post, comments: Math.max(0, post.comments - 1) } : post,
+          post.id === (data as { post_id: string }).post_id ? { ...post, comments: Math.max(0, post.comments - 1) } : post,
         ));
         return true;
       },
@@ -473,7 +473,7 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           .eq("post_id", postId);
         if (error) return [];
 
-        const ids = new Set((data ?? []).map((like) => like.user_id));
+        const ids = new Set(((data ?? []) as { user_id: string }[]).map((like) => like.user_id));
         return profiles.filter((profile) => ids.has(profile.id));
       },
       getPostComments: async (postId: string) => {
@@ -484,10 +484,10 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           .order("created_at", { ascending: true });
         if (error) return [];
 
-        return (data ?? []).map((comment) => ({
+        return ((data ?? []) as { user_id: string }[]).map((comment) => ({
           ...comment,
           profile: profiles.find((profile) => profile.id === comment.user_id),
-        }));
+        })) as PostComment[];
       },
     };
   }, [profiles, posts, currentId, following, blockedIds, likedPostIds, user]);

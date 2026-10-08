@@ -272,7 +272,7 @@ async function authHandler(request: Request, db: D1Database, env: WorkerEnv, pat
     if (throttle && now.getTime() - new Date(throttle.last_requested_at).getTime() < 60 * 1000) {
       return genericResponse;
     }
-    if (sameWindow && throttle.request_count >= 5) return genericResponse;
+    if (sameWindow && throttle && throttle.request_count >= 5) return genericResponse;
     await db.prepare(
       `INSERT INTO auth_password_reset_requests (email_hash, request_count, window_started_at, last_requested_at)
        VALUES (?, ?, ?, ?)

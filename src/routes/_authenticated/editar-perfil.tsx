@@ -78,21 +78,24 @@ useEffect(() => {
       .maybeSingle();
 
     if (data && !Array.isArray(data)) {
-      setNick(data.nick || "");
-      setUsername(data.username || "");
-      setGender(data.gender || "");
-      setOrientation(data.orientation || "");
-      setType((data.type as AccountType) || "");
-      setBio(data.bio || "");
-      setCity(data.city || "");
-      const storedAvatar = typeof data.avatar === "string" ? data.avatar : "";
+      const row = data as Record<string, unknown>;
+      const str = (key: string) => (typeof row[key] === "string" ? (row[key] as string) : "");
+      setNick(str("nick"));
+      setUsername(str("username"));
+      setGender(str("gender"));
+      setOrientation(str("orientation"));
+      setType((row["type"] as AccountType) || "");
+      setBio(str("bio"));
+      setCity(str("city"));
+      const storedAvatar = str("avatar");
       setAvatarPath(storedAvatar);
       const [resolvedAvatar] = await resolveAlbumUrls(storedAvatar ? [storedAvatar] : [], user.id);
       setAvatarUrl(resolvedAvatar ?? "");
-      setLookingFor((data.looking_for as AccountType[]) || []);
+      setLookingFor((row["looking_for"] as AccountType[]) || []);
 
-      if (data.city && data.city.includes(" - ")) {
-        const parts = data.city.split(" - ");
+      const cityValue = str("city");
+      if (cityValue.includes(" - ")) {
+        const parts = cityValue.split(" - ");
         setSelectedUf(parts[parts.length - 1] || "");
       }
     }

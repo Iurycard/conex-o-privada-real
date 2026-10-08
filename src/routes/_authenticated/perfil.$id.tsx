@@ -6,6 +6,7 @@ import { useProfiles } from "@/context/profiles-context";
 export const Route = createFileRoute("/_authenticated/perfil/$id")({
   head: () => ({
     meta: [
+            { name: "robots", content: "noindex" },
       { title: "Perfil da comunidade — Conexão Privada" },
       { name: "description", content: "Veja bio, métricas, publicações, álbum público e álbum privado de um membro da comunidade." },
       { property: "og:title", content: "Perfil da comunidade — Conexão Privada" },

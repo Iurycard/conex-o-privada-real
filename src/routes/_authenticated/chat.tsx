@@ -23,6 +23,7 @@ import { useUnreadMessages } from "@/hooks/use-unread-messages";
 export const Route = createFileRoute("/_authenticated/chat")({
   head: () => ({
     meta: [
+            { name: "robots", content: "noindex" },
       { title: "Chat — Conexão Privada" },
       { name: "description", content: "Conversas privadas com regras claras entre perfis Free e VIP." },
     ],
@@ -161,16 +162,17 @@ function ChatPage() {
       return;
     }
 
-    setCanSendPrivatePhotos(profile.vip);
-    if (!profile.vip) {
+    const profileRow = profile as { vip?: boolean; private_album?: string[] };
+    setCanSendPrivatePhotos(Boolean(profileRow.vip));
+    if (!profileRow.vip) {
       openVipModal();
       return;
     }
 
-    const photos = (profile.private_album ?? []).filter((path) => path.startsWith(`${user.id}/private/`));
+    const photos = (profileRow.private_album ?? []).filter((path) => path.startsWith(`${user.id}/private/`));
     setPrivatePhotoPaths(photos);
     if (!photos.length) {
-      toast(profile.private_album?.length
+      toast(profileRow.private_album?.length
         ? "As fotos salvas não têm caminhos compatíveis com o álbum privado"
         : "Seu álbum privado ainda não tem fotos");
       return;
@@ -232,10 +234,10 @@ function ChatPage() {
       }
 
       const previews: Record<string, string> = {};
-      for (const message of latestMessages ?? []) {
-        const partnerId = partnerByConversation.get(message.conversation_id);
+      for (const message of (latestMessages ?? []) as ChatMessage[]) {
+        const partnerId = partnerByConversation.get(String(message.conversation_id ?? ""));
         if (partnerId && previews[partnerId] === undefined) {
-          previews[partnerId] = messagePreview(message, user.id);
+          previews[partnerId] = messagePreview(message, String(user.id));
         }
       }
       setConversationPreviews(previews);

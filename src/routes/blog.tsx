@@ -1,6 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/blog")({
+  head: () => ({
+    meta: [
+      { title: "Blog — Conexão Privada" },
+      { name: "description", content: "Ideias, novidades e conversas sobre relacionamentos, privacidade e conexões com respeito." },
+      { property: "og:title", content: "Blog — Conexão Privada" },
+      { property: "og:description", content: "Artigos e novidades da comunidade Conexão Privada." },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://www.conexaoprivada.site/blog" },
+    ],
+    links: [{ rel: "canonical", href: "https://www.conexaoprivada.site/blog" }],
+  }),
   component: BlogPage,
 });
 
