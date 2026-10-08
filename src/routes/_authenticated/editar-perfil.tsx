@@ -91,8 +91,9 @@ useEffect(() => {
       setAvatarUrl(resolvedAvatar ?? "");
       setLookingFor((data.looking_for as AccountType[]) || []);
 
-      if (data.city && data.city.includes(" - ")) {
-        const parts = data.city.split(" - ");
+      const cityValue = typeof data["city"] === "string" ? data["city"] : "";
+      if (cityValue.includes(" - ")) {
+        const parts = cityValue.split(" - ");
         setSelectedUf(parts[parts.length - 1] || "");
       }
     }
