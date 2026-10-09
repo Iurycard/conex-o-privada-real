@@ -19,6 +19,8 @@ export type NewProfileInput = {
   hue: number;
   lookingFor?: AccountType[];
   orientation?: string | undefined;
+  gender?: Profile["gender"];
+  birthDate?: Profile["birth_date"];
   latitude?: number | null;
   longitude?: number | null;
 };
@@ -199,8 +201,8 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
             vip: false,
             avatar: null,
             cover: null,
-            birth_date: null,
-            gender: null,
+            birth_date: input.birthDate ?? null,
+            gender: input.gender ?? null,
             created_at: new Date().toISOString(),
           } as Profile;
           setLocalProfiles((list) => [profile, ...list]);
@@ -213,6 +215,8 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
           nick: input.nick.trim(),
           username: input.username.trim().toLowerCase(),
           type: input.type,
+          birth_date: input.birthDate ?? null,
+          gender: input.gender ?? null,
           city: input.city.trim(),
           bio: input.bio.trim(),
           hue: input.hue,

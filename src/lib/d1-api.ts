@@ -5,6 +5,7 @@ import {
   type DailyActivity,
   type EmailEnvironment,
 } from "@/email";
+import { isValidAdultBirthDate } from "@/lib/profile-validation";
 
 type D1Value = string | number | null | Uint8Array;
 type D1Row = Record<string, unknown>;
@@ -376,6 +377,34 @@ async function authHandler(request: Request, db: D1Database, env: WorkerEnv, pat
     const profileType = await db.prepare("SELECT value FROM profile_types WHERE value = ? LIMIT 1")
       .bind(profile["type"]).first<{ value: string }>();
     if (!profileType) throw new ApiError(400, "Tipo de perfil não encontrado nas opções disponíveis. Atualize a página e tente novamente.");
+    const requestedLookingFor = profile["lookingFor"] === undefined
+      ? []
+      : profile["lookingFor"];
+    if (
+      !Array.isArray(requestedLookingFor) ||
+      requestedLookingFor.some((item) => typeof item !== "string")
+    ) {
+      throw new ApiError(400, "Seleção de perfis de interesse inválida");
+    }
+    const lookingForValues = [...new Set(requestedLookingFor as string[])];
+    if (lookingForValues.length) {
+      const validLookingFor = await db.prepare(
+        `SELECT value FROM profile_types WHERE value IN (${lookingForValues.map(() => "?").join(",")})`,
+      ).bind(...lookingForValues).all<{ value: string }>();
+      if ((validLookingFor.results ?? []).length !== lookingForValues.length) {
+        throw new ApiError(400, "Um ou mais perfis de interesse não são válidos");
+      }
+    }
+    const requestedGender = typeof profile["gender"] === "string" ? profile["gender"].trim() : "";
+    const gender = requestedGender
+      ? await db.prepare("SELECT value FROM genders WHERE lower(value) = lower(?) LIMIT 1")
+        .bind(requestedGender).first<{ value: string }>()
+      : null;
+    if (!gender) throw new ApiError(400, "Selecione um gênero válido");
+    const birthDate = typeof profile["birth_date"] === "string" ? profile["birth_date"] : "";
+    if (!isValidAdultBirthDate(birthDate)) {
+      throw new ApiError(400, "Informe uma data de nascimento válida. É necessário ter 18 anos ou mais.");
+    }
     const requestedOrientation = typeof profile["orientation"] === "string" ? profile["orientation"].trim() : "";
     const orientation = requestedOrientation
       ? await db.prepare("SELECT value FROM orientations WHERE lower(value) = lower(?) LIMIT 1")
@@ -391,20 +420,22 @@ async function authHandler(request: Request, db: D1Database, env: WorkerEnv, pat
       id,
       nick,
       username,
-      type: profile["type"],
+      type: profileType.value,
+      gender: gender.value,
+      birth_date: birthDate,
       city: typeof profile["city"] === "string" ? profile["city"].slice(0, 120) : "",
       bio: typeof profile["bio"] === "string" ? profile["bio"].slice(0, 2000) : "",
       hue: Number.isInteger(profile["hue"]) ? profile["hue"] as number : 300,
       orientation: orientation?.value ?? null,
       latitude: typeof profile["latitude"] === "number" ? profile["latitude"] : null,
       longitude: typeof profile["longitude"] === "number" ? profile["longitude"] : null,
-      looking_for: JSON.stringify(Array.isArray(profile["lookingFor"]) ? profile["lookingFor"].filter((item) => typeof item === "string") : []),
+      looking_for: JSON.stringify(lookingForValues),
     };
     try {
       await db.batch([
         db.prepare("INSERT INTO auth_users (id, email, password_hash) VALUES (?, ?, ?)").bind(id, email, passwordHash),
-        db.prepare("INSERT INTO profiles (id, nick, username, type, city, bio, hue, orientation, latitude, longitude, looking_for) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-          .bind(id, profileValues.nick, profileValues.username, profileValues.type, profileValues.city, profileValues.bio, profileValues.hue, profileValues.orientation, profileValues.latitude, profileValues.longitude, profileValues.looking_for),
+        db.prepare("INSERT INTO profiles (id, nick, username, type, gender, birth_date, city, bio, hue, orientation, latitude, longitude, looking_for) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+          .bind(id, profileValues.nick, profileValues.username, profileValues.type, profileValues.gender, profileValues.birth_date, profileValues.city, profileValues.bio, profileValues.hue, profileValues.orientation, profileValues.latitude, profileValues.longitude, profileValues.looking_for),
       ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Registration failed";
@@ -1183,6 +1214,23 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new ApiError(400, "Invalid row");
       const row = { ...(entry as D1Row) };
       assertMutationScope(table, action, row, user);
+      if (
+        table === "profiles" &&
+        row["birth_date"] !== undefined &&
+        row["birth_date"] !== null &&
+        (typeof row["birth_date"] !== "string" || !isValidAdultBirthDate(row["birth_date"]))
+      ) {
+        throw new ApiError(400, "Informe uma data de nascimento válida. É necessário ter 18 anos ou mais.");
+      }
+      if (table === "profiles" && row["gender"] !== undefined && row["gender"] !== null) {
+        const requestedGender = typeof row["gender"] === "string" ? row["gender"].trim() : "";
+        const gender = requestedGender
+          ? await db.prepare("SELECT value FROM genders WHERE lower(value) = lower(?) LIMIT 1")
+            .bind(requestedGender).first<{ value: string }>()
+          : null;
+        if (!gender) throw new ApiError(400, "Selecione um gênero válido");
+        row["gender"] = gender.value;
+      }
       if (table === "conversations") {
         if (row["user_a"] === row["user_b"]) throw new ApiError(400, "A conversation requires two different profiles");
         const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
@@ -1254,6 +1302,23 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
 
   const values = query.values && typeof query.values === "object" && !Array.isArray(query.values) ? query.values as D1Row : {};
   assertMutationScope(table, action, values, user);
+  if (
+    table === "profiles" &&
+    values["birth_date"] !== undefined &&
+    values["birth_date"] !== null &&
+    (typeof values["birth_date"] !== "string" || !isValidAdultBirthDate(values["birth_date"]))
+  ) {
+    throw new ApiError(400, "Informe uma data de nascimento válida. É necessário ter 18 anos ou mais.");
+  }
+  if (table === "profiles" && values["gender"] !== undefined && values["gender"] !== null) {
+    const requestedGender = typeof values["gender"] === "string" ? values["gender"].trim() : "";
+    const gender = requestedGender
+      ? await db.prepare("SELECT value FROM genders WHERE lower(value) = lower(?) LIMIT 1")
+        .bind(requestedGender).first<{ value: string }>()
+      : null;
+    if (!gender) throw new ApiError(400, "Selecione um gênero válido");
+    values["gender"] = gender.value;
+  }
   if (table === "reports" && action !== "insert") throw new ApiError(403, "Use the administrative moderation endpoint");
   if (table === "profiles" && action === "update" && "vip" in values) {
     throw new ApiError(403, "VIP status can only be changed through the administrative endpoint");

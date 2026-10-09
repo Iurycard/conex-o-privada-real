@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/profile-options";
+import { accountTypes, genderOptions, sexualOrientationOptions, type AccountType } from "@/lib/profile-options";
 import { useAuth } from "@/hooks/use-auth";
 import { ProfileAvatarPicker } from "@/components/profile-avatar-picker";
 import { removeAlbumPhoto, resolveAlbumUrls, uploadAlbumPhotos } from "@/lib/album-storage";
+import { ProfileOptionChips } from "@/components/profile-option-chips";
+import { getLatestAdultBirthDate, isValidAdultBirthDate } from "@/lib/profile-validation";
 
 export const Route = createFileRoute("/_authenticated/editar-perfil")({
   head: () => ({
@@ -23,8 +25,6 @@ export const Route = createFileRoute("/_authenticated/editar-perfil")({
   }),
   component: EditProfilePage,
 });
-
-const genderOptions = ["Mulher", "Homem", "Não binário", "Casal"];
 
 function EditProfilePage() {
   const navigate = useNavigate();
@@ -85,6 +85,7 @@ useEffect(() => {
       setGender(str("gender"));
       setOrientation(str("orientation"));
       setType((row["type"] as AccountType) || "");
+      setBirthDate(str("birth_date"));
       setBio(str("bio"));
       setCity(str("city"));
       const storedAvatar = str("avatar");
@@ -103,12 +104,6 @@ useEffect(() => {
   loadProfile();
 }, [user]);
 
-  const toggleLooking = (option: AccountType) => {
-    setLookingFor((selected) => selected.includes(option)
-      ? selected.filter((item) => item !== option)
-      : [...selected, option]);
-  };
-
 const saveProfile = async () => {
   if (!nick.trim() || !username.trim()) {
     toast.error("Informe o nome do perfil e o usuário");
@@ -117,6 +112,14 @@ const saveProfile = async () => {
 
   if (!user) {
     toast.error("Usuário não autenticado");
+    return;
+  }
+  if (!gender || !type) {
+    toast.error("Selecione o gênero e o tipo de perfil");
+    return;
+  }
+  if (!isValidAdultBirthDate(birthDate)) {
+    toast.error("Informe uma data de nascimento válida. É necessário ter 18 anos ou mais.");
     return;
   }
 
@@ -140,6 +143,7 @@ const saveProfile = async () => {
         gender,
         orientation,
         type,
+        birth_date: birthDate,
         city,
         bio: bio.trim(),
         avatar: finalAvatarPath || null,
@@ -192,39 +196,18 @@ const saveProfile = async () => {
         <ProfileAvatarPicker avatarUrl={avatarUrl} nick={nick} file={avatarFile} onFileChange={setAvatarFile} disabled={saving} />
 
         <section className="mt-6 space-y-5">
-          <div>
-            <Label className="text-sm">Gênero</Label>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {genderOptions.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={gender === option}
-                  onClick={() => setGender(option)}
-                  className={`rounded-xl border px-3 py-2.5 text-left text-sm transition-colors ${gender === option ? "border-primary/60 bg-primary/10 text-foreground shadow-neon" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <Label className="text-sm">Orientação sexual</Label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {sexualOrientationOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={orientation === option.value}
-                  onClick={() => setOrientation(option.value)}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${orientation === option.value ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
-                >
-                  {option.value}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ProfileOptionChips
+            label="Gênero"
+            options={genderOptions.map((value) => ({ value, label: value }))}
+            value={gender}
+            onChange={(value) => setGender(value as (typeof genderOptions)[number])}
+          />
+          <ProfileOptionChips
+            label="Orientação sexual"
+            options={sexualOrientationOptions}
+            value={orientation}
+            onChange={(value) => setOrientation(value as string)}
+          />
 
           <div>
             <Label htmlFor="profile-name" className="text-sm">Nome do perfil</Label>
@@ -242,26 +225,25 @@ const saveProfile = async () => {
             />
           </div>
 
-          <div>
-            <Label className="text-sm">Tipo de perfil</Label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {accountTypes.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={type === option}
-                  onClick={() => setType(option)}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${type === option ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ProfileOptionChips
+            label="Tipo de perfil"
+            options={accountTypes.map((value) => ({ value, label: value }))}
+            value={type}
+            onChange={(value) => setType(value as AccountType)}
+          />
 
           <div>
             <Label htmlFor="birth-date" className="text-sm">Data de nascimento</Label>
-            <Input id="birth-date" type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} className="mt-2 border-border bg-surface" />
+            <Input
+              id="birth-date"
+              type="date"
+              max={getLatestAdultBirthDate()}
+              value={birthDate}
+              onChange={(event) => setBirthDate(event.target.value)}
+              className="mt-2 border-border bg-surface"
+              required
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Você precisa ter 18 anos ou mais para manter um perfil.</p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -314,26 +296,13 @@ const saveProfile = async () => {
             <Textarea id="profile-description" rows={5} value={bio} onChange={(event) => setBio(event.target.value)} placeholder="Conte o essencial sobre vocês, seus interesses e o que procuram." className="mt-2 border-border bg-surface" />
           </div>
 
-          <div>
-            <Label className="text-sm">Perfis de interesse</Label>
-            <p className="mt-1 text-xs text-muted-foreground">Selecione os tipos de perfil que deseja encontrar.</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {accountTypes.map((option) => {
-                const active = lookingFor.includes(option);
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => toggleLooking(option)}
-                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${active ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
-                  >
-                    {option}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <ProfileOptionChips
+            label="Perfis de interesse"
+            options={accountTypes.map((value) => ({ value, label: value }))}
+            value={lookingFor}
+            onChange={(value) => setLookingFor(value as AccountType[])}
+            multiple
+          />
         </section>
 
         <Button type="button" onClick={() => void saveProfile()} disabled={saving} className="mt-8 h-12 w-full rounded-full bg-gradient-primary font-semibold text-primary-foreground shadow-neon hover:opacity-90">

@@ -15,6 +15,8 @@ export const accountTypes: AccountType[] = [
   "Travesti",
 ];
 
+export const genderOptions = ["Mulher", "Homem", "Não binário", "Casal"] as const;
+
 export const sexualOrientationOptions = [
   { value: "heterossexual", label: "Heterossexual" },
   { value: "homossexual", label: "Homossexual" },

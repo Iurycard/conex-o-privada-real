@@ -1,11 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ArrowLeft, MapPin, ShieldCheck } from "lucide-react";
-import { accountTypes, sexualOrientationOptions, type AccountType } from "@/lib/profile-options";
+import { accountTypes, genderOptions, sexualOrientationOptions, type AccountType } from "@/lib/profile-options";
 import { useProfiles } from "@/context/profiles-context";
 import { useEffect } from "react";
 import { useAuth, type AuthUser } from "@/hooks/use-auth";
 import { authRequest } from "@/lib/d1-client";
+import { ProfileOptionChips } from "@/components/profile-option-chips";
+import { getLatestAdultBirthDate, isValidAdultBirthDate } from "@/lib/profile-validation";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -33,10 +35,13 @@ export const Route = createFileRoute("/cadastro")({
 
 function SignupPage() {
   const [type, setType] = useState<AccountType>("Casal (Ele/Ela)");
+  const [gender, setGender] = useState<(typeof genderOptions)[number] | "">("");
+  const [birthDate, setBirthDate] = useState("");
   const [nick, setNick] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [city, setCity] = useState("");
   const [selectedUf, setSelectedUf] = useState("");
   const [ufs, setUfs] = useState<{ sigla: string; nome: string }[]>([]);
@@ -70,9 +75,6 @@ function SignupPage() {
       .catch(() => {});
   }, [selectedUf]);
   
-  const toggleLooking = (t: AccountType) =>
-    setLookingFor((list) => (list.includes(t) ? list.filter((x) => x !== t) : [...list, t]));
-
   const saveAvatar = async (profileId: string) => {
     if (!avatarFile) return;
     const [path] = await uploadAlbumPhotos(profileId, "public", [avatarFile]);
@@ -94,10 +96,20 @@ function SignupPage() {
       toast.error("Informe o nome do perfil e o usuário");
       return;
     }
-  const payload = {
+    if (!gender) {
+      toast.error("Selecione o gênero");
+      return;
+    }
+    if (!isValidAdultBirthDate(birthDate)) {
+      toast.error("Informe uma data de nascimento válida. É necessário ter 18 anos ou mais.");
+      return;
+    }
+    const payload = {
       nick,
       username: username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
       type,
+      gender,
+      birthDate,
       city,
       bio,
       hue: 300,
@@ -125,17 +137,23 @@ function SignupPage() {
       toast.error("Informe um e-mail e uma senha com pelo menos 12 caracteres");
       return;
     }
+    if (password !== confirmPassword) {
+      toast.error("As senhas não coincidem");
+      return;
+    }
 
     setBusy(true);
+    const { birthDate: birth_date, ...profilePayload } = payload;
     const { data: registeredUser, error } = await authRequest<AuthUser>("/api/auth/register", {
       email: email.trim(),
       password,
       profile: {
-        ...payload,
-        nick: payload.nick.trim(),
-        username: payload.username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
-        city: payload.city.trim(),
-        bio: payload.bio.trim(),
+        ...profilePayload,
+        birth_date,
+        nick: profilePayload.nick.trim(),
+        username: profilePayload.username.trim().replace(/^@/, "").replace(/\s+/g, "_").toLowerCase(),
+        city: profilePayload.city.trim(),
+        bio: profilePayload.bio.trim(),
       },
     });
     if (error || !registeredUser) {
@@ -186,23 +204,19 @@ function SignupPage() {
           Seu apelido é o que aparece publicamente. Nada de nome real ou documentos.
         </div>
 
-        <section>
-          <Label className="text-sm">Tipo de conta</Label>
-          <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
-            {accountTypes.map((t) => (
-              <button
-                key={t}
-                onClick={() => setType(t)}
-                className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
-                  type === t
-                    ? "border-primary/60 bg-primary/10 text-foreground shadow-neon"
-                    : "border-border bg-surface text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+        <section className="space-y-5">
+          <ProfileOptionChips
+            label="Tipo de perfil"
+            options={accountTypes.map((value) => ({ value, label: value }))}
+            value={type}
+            onChange={(value) => setType(value as AccountType)}
+          />
+          <ProfileOptionChips
+            label="Gênero"
+            options={genderOptions.map((value) => ({ value, label: value }))}
+            value={gender}
+            onChange={(value) => setGender(value as (typeof genderOptions)[number])}
+          />
         </section>
 
         <section className="mt-6 space-y-4">
@@ -232,8 +246,25 @@ function SignupPage() {
                 <Label htmlFor="password" className="text-sm">Senha</Label>
                 <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 12 caracteres" className="mt-2 border-border bg-surface" />
               </div>
+              <div>
+                <Label htmlFor="confirm-password" className="text-sm">Repita a senha</Label>
+                <Input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Digite a senha novamente" className="mt-2 border-border bg-surface" />
+              </div>
             </>
           )}
+          <div>
+            <Label htmlFor="birth-date" className="text-sm">Data de nascimento</Label>
+            <Input
+              id="birth-date"
+              type="date"
+              max={getLatestAdultBirthDate()}
+              value={birthDate}
+              onChange={(event) => setBirthDate(event.target.value)}
+              className="mt-2 border-border bg-surface"
+              required
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Você precisa ter 18 anos ou mais para criar um perfil.</p>
+          </div>
                  <div>
             <Label htmlFor="loc" className="text-sm">Localização</Label>
             <div className="relative mt-2">
@@ -292,22 +323,12 @@ function SignupPage() {
     </select>
   </div>
   </section>
-          <div>
-            <Label className="text-sm">Orientação sexual</Label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {sexualOrientationOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={orientation === option.value}
-                  onClick={() => setOrientation(option.value)}
-                  className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${orientation === option.value ? "border-transparent bg-gradient-primary text-primary-foreground" : "border-border bg-surface text-muted-foreground hover:text-foreground"}`}
-                >
-                  {option.value}
-                </button>
-              ))}
-            </div>
-          </div>
+          <ProfileOptionChips
+            label="Orientação sexual"
+            options={sexualOrientationOptions}
+            value={orientation}
+            onChange={(value) => setOrientation(value as string)}
+          />
 
           <div>
             <Label htmlFor="bio" className="text-sm">Bio</Label>
@@ -321,32 +342,13 @@ function SignupPage() {
             />
           </div>
 
-          <div>
-            <Label className="text-sm">O que você está procurando?</Label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {accountTypes.map((t) => {
-                const active = lookingFor.includes(t);
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => toggleLooking(t)}
-                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                      active
-                        ? "border-transparent bg-gradient-primary text-primary-foreground"
-                        : "border-border bg-surface text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              Selecione um ou mais perfis. Isso define quem encontra você na busca.
-            </p>
-          </div>
+          <ProfileOptionChips
+            label="O que você está procurando?"
+            options={accountTypes.map((value) => ({ value, label: value }))}
+            value={lookingFor}
+            onChange={(value) => setLookingFor(value as AccountType[])}
+            multiple
+          />
 
         <button
           onClick={() => void handleSubmit()}
