@@ -510,9 +510,12 @@ async function authHandler(request: Request, db: D1Database, env: WorkerEnv, pat
 }
 
 async function getUserFromId(db: D1Database, id: string, email: string): Promise<AuthUser> {
-  const row = await db.prepare("SELECT COALESCE((SELECT role FROM user_roles WHERE user_id = ? AND role = 'admin' LIMIT 1), 'user') AS role")
-    .bind(id).first<{ role: string }>();
-  return { id, email, role: row?.role ?? "user" };
+  const row = await db.prepare(
+    `SELECT
+      COALESCE((SELECT role FROM user_roles WHERE user_id = ? AND role = 'admin' LIMIT 1), 'user') AS role,
+      (SELECT subscription_expires_at FROM profiles WHERE id = ? LIMIT 1) AS subscription_expires_at`,
+  ).bind(id, id).first<{ role: string; subscription_expires_at: string | null }>();
+  return { id, email, role: row?.role ?? "user", subscription_expires_at: row?.subscription_expires_at ?? null };
 }
 
 type Filter = { column: string; operator: string; value: unknown };
@@ -1660,7 +1663,6 @@ async function createVipPaymentOrder(
           metadata: { user_id: user.id, plan_type: planType, order_id: orderId },
           payment_methods: {
             excluded_payment_types: [
-              { id: "account_money" },
               { id: "atm" },
               { id: "ticket" },
               { id: "bank_transfer" },
