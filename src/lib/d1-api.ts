@@ -35,8 +35,13 @@ type R2Bucket = {
   delete: (key: string) => Promise<void>;
 };
 
-type WorkerEnv = { DB: D1Database; MEDIA?: R2Bucket } & EmailEnvironment;
-type AuthUser = { id: string; email: string; role: string };
+type WorkerEnv = {
+  DB: D1Database;
+  MEDIA?: R2Bucket;
+  MERCADOPAGO_ACCESS_TOKEN?: string;
+  MERCADOPAGO_WEBHOOK_SECRET?: string;
+} & EmailEnvironment;
+type AuthUser = { id: string; email: string; role: string; subscription_expires_at: string | null };
 
 const SESSION_COOKIE = "cp_session";
 const SESSION_DAYS = 30;
@@ -155,10 +160,11 @@ async function getUser(request: Request, db: D1Database): Promise<AuthUser | nul
   if (!token) return null;
   const tokenHash = bytesToBase64Url(await sha256(token));
   const row = await db.prepare(
-    `SELECT u.id, u.email,
+    `SELECT u.id, u.email, p.subscription_expires_at,
       COALESCE((SELECT role FROM user_roles WHERE user_id = u.id AND role = 'admin' LIMIT 1), 'user') AS role
      FROM auth_sessions s
      JOIN auth_users u ON u.id = s.user_id
+     JOIN profiles p ON p.id = u.id
      LEFT JOIN admin_account_status a ON a.user_id = u.id
      WHERE s.token_hash = ? AND s.expires_at > ?
        AND (a.status IS NULL OR a.status = 'active'
@@ -167,6 +173,11 @@ async function getUser(request: Request, db: D1Database): Promise<AuthUser | nul
      LIMIT 1`,
   ).bind(tokenHash, new Date().toISOString(), new Date().toISOString()).first<AuthUser>();
   return row;
+}
+
+function isVip(user: { subscription_expires_at?: string | null }) {
+  const expiresAt = user.subscription_expires_at;
+  return typeof expiresAt === "string" && Date.parse(expiresAt) > Date.now();
 }
 
 async function createSession(db: D1Database, userId: string) {
@@ -541,6 +552,13 @@ function decodeRow(row: D1Row): D1Row {
   for (const column of BOOLEAN_COLUMNS) {
     if (column in result) result[column] = Boolean(result[column]);
   }
+  if ("subscription_expires_at" in result && "vip" in result) {
+    result["vip"] = isVip({
+      subscription_expires_at: typeof result["subscription_expires_at"] === "string"
+        ? result["subscription_expires_at"]
+        : null,
+    });
+  }
   for (const column of ["avatar", "cover"]) {
     const path = result[column];
     if (typeof path === "string" && path.includes("/r2/")) {
@@ -632,8 +650,12 @@ async function adminDashboardHandler(request: Request, db: D1Database, user: Aut
       `SELECT COUNT(*) AS count FROM admin_account_status
        WHERE status = 'suspended' AND (suspended_until IS NULL OR julianday(suspended_until) > julianday('now'))`,
     ).first<{ count: number }>(),
-    db.prepare("SELECT COUNT(*) AS count FROM profiles WHERE vip = 1").first<{ count: number }>(),
-    db.prepare("SELECT COUNT(*) AS count FROM profiles WHERE vip = 0").first<{ count: number }>(),
+    db.prepare(
+      "SELECT COUNT(*) AS count FROM profiles WHERE subscription_expires_at > ?",
+    ).bind(new Date().toISOString()).first<{ count: number }>(),
+    db.prepare(
+      "SELECT COUNT(*) AS count FROM profiles WHERE subscription_expires_at IS NULL OR subscription_expires_at <= ?",
+    ).bind(new Date().toISOString()).first<{ count: number }>(),
     db.prepare(
       `SELECT r.id, r.reporter_id, reporter.nick AS reporter_name,
               r.reported_profile_id, reported.nick AS reported_name,
@@ -647,7 +669,8 @@ async function adminDashboardHandler(request: Request, db: D1Database, user: Aut
        ORDER BY r.created_at DESC LIMIT 100`,
     ).all<D1Row>(),
     db.prepare(
-      `SELECT u.id, u.email, u.created_at, p.nick, p.username, p.avatar, p.vip,
+      `SELECT u.id, u.email, u.created_at, p.nick, p.username, p.avatar,
+              CASE WHEN p.subscription_expires_at > ? THEN 1 ELSE 0 END AS vip,
               CASE WHEN s.status = 'suspended'
                     AND (s.suspended_until IS NULL OR julianday(s.suspended_until) > julianday('now'))
                    THEN 'suspended' ELSE 'active' END AS account_status,
@@ -657,7 +680,7 @@ async function adminDashboardHandler(request: Request, db: D1Database, user: Aut
        LEFT JOIN profiles p ON p.id = u.id
        LEFT JOIN admin_account_status s ON s.user_id = u.id
        ORDER BY u.created_at DESC LIMIT 500`,
-    ).all<D1Row>(),
+    ).bind(new Date().toISOString()).all<D1Row>(),
     db.prepare(
       "SELECT id, nick, avatar, public_album, private_album FROM profiles ORDER BY updated_at DESC LIMIT 200",
     ).all<D1Row>(),
@@ -846,9 +869,13 @@ async function adminActionHandler(request: Request, db: D1Database, env: WorkerE
     const result = await db.prepare("SELECT id FROM profiles WHERE id = ? LIMIT 1")
       .bind(targetId).first<{ id: string }>();
     if (!result) throw new ApiError(404, "Profile not found");
+    const adminVipExpiry = body["vip"]
+      ? new Date(Date.now() + VIP_PLANS.mensal.days * 24 * 60 * 60 * 1000).toISOString()
+      : null;
     await db.batch([
-      db.prepare("UPDATE profiles SET vip = ?, updated_at = ? WHERE id = ?")
-        .bind(body["vip"] ? 1 : 0, now, targetId),
+      db.prepare(
+        "UPDATE profiles SET vip = ?, subscription_status = ?, subscription_expires_at = ?, updated_at = ? WHERE id = ?",
+      ).bind(body["vip"] ? 1 : 0, body["vip"] ? "active" : "free", adminVipExpiry, now, targetId),
       db.prepare(
         "INSERT INTO admin_audit_log (id, actor_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?, ?)",
       ).bind(crypto.randomUUID(), user.id, body["vip"] ? "vip_granted" : "vip_removed", "user", targetId, JSON.stringify({ prototype: true })),
@@ -1150,6 +1177,53 @@ function filterSql(filters: Filter[], columns: readonly string[]) {
   return { clauses, values };
 }
 
+function requestedAlbum(value: unknown): string[] {
+  if (value === null) return [];
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+    return value as string[];
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+        return parsed as string[];
+      }
+    } catch {
+      throw new ApiError(400, "Invalid private album data");
+    }
+  }
+  throw new ApiError(400, "Invalid private album data");
+}
+
+async function socialFollowCountsHandler(request: Request, db: D1Database) {
+  if (request.method !== "GET") throw new ApiError(405, "Method not allowed");
+  const result = await db.prepare(
+    `SELECT p.id AS profile_id,
+      COALESCE(f.followers, 0) AS followers,
+      COALESCE(g.following, 0) AS following
+     FROM profiles p
+     LEFT JOIN (SELECT following_id, COUNT(*) AS followers FROM follows GROUP BY following_id) f
+       ON f.following_id = p.id
+     LEFT JOIN (SELECT follower_id, COUNT(*) AS following FROM follows GROUP BY follower_id) g
+       ON g.follower_id = p.id
+     LIMIT 500`,
+  ).all<{ profile_id: string; followers: number; following: number }>();
+  return json({ counts: result.results ?? [] });
+}
+
+async function assertPrivateAlbumChangeAllowed(db: D1Database, row: D1Row, user: AuthUser) {
+  if (user.role === "admin" || row["private_album"] === undefined || isVip(user)) return;
+  const currentProfile = await db.prepare(
+    "SELECT private_album FROM profiles WHERE id = ? LIMIT 1",
+  ).bind(user.id).first<{ private_album: string | null }>();
+  if (!currentProfile) throw new ApiError(404, "Profile not found");
+  const currentAlbum = parseAlbum(currentProfile.private_album ?? "[]", "private album");
+  const requested = requestedAlbum(row["private_album"]);
+  if (requested.some((photo) => !currentAlbum.includes(photo))) {
+    throw new ApiError(403, "Only VIP members can add private album photos");
+  }
+}
+
 async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
   if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
   assertSameOrigin(request);
@@ -1162,7 +1236,10 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
 
   const filters = parseFilters(query.filters ?? [], columns);
   const filterParts = filterSql(filters, columns);
-  const scope = addScope(table, action, user);
+  let scope = addScope(table, action, user);
+  if (table === "follows" && action === "select" && user.role !== "admin") {
+    if (!isVip(user)) scope = { sql: "follower_id = ?", values: [user.id] };
+  }
   const clauses = [...filterParts.clauses, ...(scope.sql ? [scope.sql] : [])];
   const where = clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
   const whereValues = [...filterParts.values, ...scope.values];
@@ -1195,6 +1272,13 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
     const rows = await db.prepare(`SELECT ${projection} FROM ${table}${where}${orderBy ? ` ORDER BY ${orderBy}` : ""} LIMIT ?`)
       .bind(...whereValues, limit).all<D1Row>();
     let data = (rows.results ?? []).map(decodeRow);
+    if (table === "notifications" && user.role !== "admin") {
+      if (!isVip(user)) {
+        data = data.map((notification) =>
+          notification["type"] === "follow" ? { ...notification, actor_id: null } : notification,
+        );
+      }
+    }
     if (table === "posts" && rawColumns.includes("profiles!")) {
       data = await Promise.all(data.map(async (post) => {
         const author = await db.prepare(
@@ -1214,6 +1298,7 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new ApiError(400, "Invalid row");
       const row = { ...(entry as D1Row) };
       assertMutationScope(table, action, row, user);
+      if (table === "profiles") await assertPrivateAlbumChangeAllowed(db, row, user);
       if (
         table === "profiles" &&
         row["birth_date"] !== undefined &&
@@ -1233,26 +1318,23 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
       }
       if (table === "conversations") {
         if (row["user_a"] === row["user_b"]) throw new ApiError(400, "A conversation requires two different profiles");
-        const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
-        if (!profile?.vip) throw new ApiError(403, "Only VIP members can start conversations");
+        if (!isVip(user)) throw new ApiError(403, "Only VIP members can start conversations");
       }
       if (table === "messages") {
         row["created_at"] = new Date().toISOString();
         const conversation = await db.prepare("SELECT user_a, user_b FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1")
           .bind(String(row["conversation_id"] ?? ""), user.id, user.id).first<{ user_a: string; user_b: string }>();
         if (!conversation || row["sender_id"] !== user.id) throw new ApiError(403, "Not a participant in this conversation");
-        const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
-        if (!profile) throw new ApiError(403, "Profile not found");
-        if (!profile.vip) await assertFreeCanContinueConversation(db, String(row["conversation_id"]), user.id);
+        if (!isVip(user)) await assertFreeCanContinueConversation(db, String(row["conversation_id"]), user.id);
       }
       if (table === "album_access_requests") {
-        const profile = await db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number }>();
-        if (!profile?.vip) throw new ApiError(403, "Only VIP members can request private album access");
+        if (!isVip(user)) throw new ApiError(403, "Only VIP members can request private album access");
       }
       if (table === "message_attachments") {
-        const profile = await db.prepare("SELECT vip, private_album FROM profiles WHERE id = ? LIMIT 1")
-          .bind(user.id).first<{ vip: number; private_album: string }>();
-        if (!profile?.vip) throw new ApiError(403, "Only VIP members can send private photo attachments");
+        const profile = await db.prepare("SELECT private_album FROM profiles WHERE id = ? LIMIT 1")
+          .bind(user.id).first<{ private_album: string }>();
+        if (!profile) throw new ApiError(404, "Profile not found");
+        if (!isVip(user)) throw new ApiError(403, "Only VIP members can send private photo attachments");
         const message = await db.prepare("SELECT 1 AS allowed FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.id = ? AND m.sender_id = ? AND (c.user_a = ? OR c.user_b = ?) LIMIT 1")
           .bind(String(row["message_id"] ?? ""), user.id, user.id, user.id).first();
         const storagePath = typeof row["storage_path"] === "string" ? row["storage_path"] : "";
@@ -1302,6 +1384,9 @@ async function dataHandler(request: Request, db: D1Database, user: AuthUser) {
 
   const values = query.values && typeof query.values === "object" && !Array.isArray(query.values) ? query.values as D1Row : {};
   assertMutationScope(table, action, values, user);
+  if (table === "profiles" && action === "update") {
+    await assertPrivateAlbumChangeAllowed(db, values, user);
+  }
   if (
     table === "profiles" &&
     values["birth_date"] !== undefined &&
@@ -1391,6 +1476,22 @@ async function mediaHandler(request: Request, db: D1Database, env: WorkerEnv, us
       await bucket.delete(key);
       return json({ deleted: true });
     }
+    if (kind === "private") {
+      const verificationUpload = request.headers.get("x-media-purpose") === "verification";
+      if (!isVip(user) && !verificationUpload) {
+        throw new ApiError(403, "Only VIP members can add private album photos");
+      }
+      if (verificationUpload) {
+        if (!user) throw new ApiError(404, "Profile not found");
+        const alreadyVerified = await db.prepare(
+          "SELECT 1 AS verified FROM verified_profiles WHERE user_id = ? LIMIT 1",
+        ).bind(user.id).first();
+        const pending = await db.prepare(
+          "SELECT 1 AS pending FROM verification_requests WHERE user_id = ? AND status = 'pending' LIMIT 1",
+        ).bind(user.id).first();
+        if (alreadyVerified || pending) throw new ApiError(409, "A verification photo is not currently needed");
+      }
+    }
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType !== "image/webp") throw new ApiError(400, "Unsupported media type");
     const body = await request.arrayBuffer();
@@ -1412,8 +1513,7 @@ async function mediaHandler(request: Request, db: D1Database, env: WorkerEnv, us
       headers.set("content-length", String(body.byteLength));
       return new Response(body, { headers });
     }
-    const viewer = await db.prepare("SELECT vip FROM profiles WHERE id = ?").bind(user.id).first<{ vip: number }>();
-    const approved = viewer?.vip ? await db.prepare("SELECT 1 AS allowed FROM album_access_requests WHERE requester_id = ? AND owner_id = ? AND status = 'approved' LIMIT 1")
+    const approved = isVip(user) ? await db.prepare("SELECT 1 AS allowed FROM album_access_requests WHERE requester_id = ? AND owner_id = ? AND status = 'approved' LIMIT 1")
       .bind(user.id, ownerId).first() : null;
     const shared = await db.prepare("SELECT 1 AS allowed FROM message_attachments a JOIN messages m ON m.id = a.message_id JOIN conversations c ON c.id = m.conversation_id WHERE a.storage_path = ? AND (c.user_a = ? OR c.user_b = ?) LIMIT 1")
       .bind(key, user.id, user.id).first();
@@ -1431,14 +1531,330 @@ async function mediaHandler(request: Request, db: D1Database, env: WorkerEnv, us
   return new Response(body, { headers });
 }
 
-async function activatePrototypeVip(request: Request, db: D1Database, user: AuthUser) {
+const VIP_PLANS = {
+  mensal: { amountCents: 1990, days: 30, title: "Conexão Privada VIP Mensal" },
+  trimestral: { amountCents: 4990, days: 90, title: "Conexão Privada VIP Trimestral" },
+} as const;
+
+type VipPlanType = keyof typeof VIP_PLANS;
+
+function requireMercadoPago(env: WorkerEnv) {
+  if (!env.MERCADOPAGO_ACCESS_TOKEN) throw new ApiError(503, "Mercado Pago access token is not configured");
+  return env.MERCADOPAGO_ACCESS_TOKEN;
+}
+
+async function mercadoPagoRequest<T>(token: string, path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`https://api.mercadopago.com${path}`, {
+      ...init,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    console.error("Could not connect to Mercado Pago:", error);
+    throw new ApiError(502, "Não foi possível conectar ao Mercado Pago");
+  }
+
+  const payload = await response.json().catch(() => null) as (T & { message?: string }) | null;
+  if (!response.ok || !payload) {
+    console.error("Mercado Pago API request failed:", response.status, payload?.message ?? "No response details");
+    throw new ApiError(502, "O Mercado Pago não conseguiu processar a solicitação");
+  }
+  return payload;
+}
+
+async function createVipPaymentOrder(
+  request: Request,
+  db: D1Database,
+  env: WorkerEnv,
+  user: AuthUser,
+  paymentMethod: "pix" | "card",
+) {
   if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
   assertSameOrigin(request);
+  const body = await readJson(request);
+  if (body["userId"] !== undefined && body["userId"] !== user.id) {
+    throw new ApiError(403, "The checkout user does not match the authenticated account");
+  }
+  const planType = body["planType"];
+  if (typeof planType !== "string" || !Object.prototype.hasOwnProperty.call(VIP_PLANS, planType)) {
+    throw new ApiError(400, "Selecione um plano válido");
+  }
+  const plan = VIP_PLANS[planType as VipPlanType];
+  const token = requireMercadoPago(env);
+  const orderId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT INTO vip_payments
+      (external_reference, user_id, plan_type, payment_method, amount_cents, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'created', ?, ?)`,
+  ).bind(orderId, user.id, planType, paymentMethod, plan.amountCents, now, now).run();
+
+  const notificationUrl = new URL("/api/webhooks/mercadopago", request.url).toString();
+  try {
+    if (paymentMethod === "pix") {
+      const payment = await mercadoPagoRequest<{
+        id: number | string;
+        status: string;
+        point_of_interaction?: {
+          transaction_data?: { qr_code?: string; qr_code_base64?: string };
+        };
+      }>(token, "/v1/payments", {
+        method: "POST",
+        headers: { "X-Idempotency-Key": orderId },
+        body: JSON.stringify({
+          transaction_amount: plan.amountCents / 100,
+          description: plan.title,
+          payment_method_id: "pix",
+          payer: { email: user.email },
+          external_reference: orderId,
+          notification_url: notificationUrl,
+          metadata: { user_id: user.id, plan_type: planType, order_id: orderId },
+        }),
+      });
+      const qrCode = payment.point_of_interaction?.transaction_data?.qr_code;
+      const qrCodeBase64 = payment.point_of_interaction?.transaction_data?.qr_code_base64;
+      if (!payment.id || !qrCode || !qrCodeBase64) {
+        throw new ApiError(502, "O Mercado Pago não retornou os dados do QR Code PIX");
+      }
+      await db.prepare(
+        "UPDATE vip_payments SET mp_payment_id = ?, status = 'pending', updated_at = ? WHERE external_reference = ?",
+      ).bind(String(payment.id), new Date().toISOString(), orderId).run();
+      return json({
+        externalReference: orderId,
+        paymentId: String(payment.id),
+        status: payment.status,
+        qr_code: qrCode,
+        qr_code_base64: qrCodeBase64,
+      }, 201);
+    }
+
+    const origin = new URL(request.url).origin;
+    const preference = await mercadoPagoRequest<{ id: string; init_point?: string }>(
+      token,
+      "/checkout/preferences",
+      {
+        method: "POST",
+        headers: { "X-Idempotency-Key": orderId },
+        body: JSON.stringify({
+          items: [{
+            id: planType,
+            title: plan.title,
+            quantity: 1,
+            currency_id: "BRL",
+            unit_price: plan.amountCents / 100,
+          }],
+          payer: { email: user.email },
+          external_reference: orderId,
+          notification_url: notificationUrl,
+          back_urls: {
+            success: `${origin}/perfil?vip_payment=1`,
+            pending: `${origin}/perfil?vip_payment=1`,
+            failure: `${origin}/perfil?vip_payment=1`,
+          },
+          auto_return: "approved",
+          metadata: { user_id: user.id, plan_type: planType, order_id: orderId },
+          payment_methods: {
+            excluded_payment_types: [
+              { id: "account_money" },
+              { id: "atm" },
+              { id: "ticket" },
+              { id: "bank_transfer" },
+            ],
+          },
+        }),
+      },
+    );
+    if (!preference.id || !preference.init_point) {
+      throw new ApiError(502, "O Mercado Pago não retornou o link de pagamento");
+    }
+    await db.prepare(
+      "UPDATE vip_payments SET status = 'pending', updated_at = ? WHERE external_reference = ?",
+    ).bind(new Date().toISOString(), orderId).run();
+    return json({ externalReference: orderId, checkoutUrl: preference.init_point }, 201);
+  } catch (error) {
+    await db.prepare(
+      "UPDATE vip_payments SET status = 'failed', updated_at = ? WHERE external_reference = ? AND status = 'created'",
+    ).bind(new Date().toISOString(), orderId).run();
+    throw error;
+  }
+}
+
+function bytesToHex(bytes: Uint8Array) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function validMercadoPagoSignature(request: Request, secret: string, dataId: string) {
+  const signature = request.headers.get("x-signature") ?? "";
+  const requestId = request.headers.get("x-request-id") ?? "";
+  const parts = Object.fromEntries(signature.split(",").map((part) => {
+    const [key, ...value] = part.trim().split("=");
+    return [key ?? "", value.join("=")];
+  }));
+  const timestamp = parts["ts"];
+  const suppliedSignature = parts["v1"];
+  if (!timestamp || !suppliedSignature || !requestId || !dataId) return false;
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const manifest = `id:${dataId.toLowerCase()};request-id:${requestId};ts:${timestamp};`;
+  const expected = bytesToHex(new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(manifest)),
+  ));
+  const expectedBytes = new TextEncoder().encode(expected);
+  const suppliedBytes = new TextEncoder().encode(suppliedSignature.toLowerCase());
+  if (expectedBytes.length !== suppliedBytes.length) return false;
+  let difference = 0;
+  for (let index = 0; index < expectedBytes.length; index += 1) {
+    difference |= expectedBytes[index]! ^ suppliedBytes[index]!;
+  }
+  return difference === 0;
+}
+
+async function processMercadoPagoPayment(
+  db: D1Database,
+  env: WorkerEnv,
+  paymentId: string,
+) {
+  const token = requireMercadoPago(env);
+  const payment = await mercadoPagoRequest<{
+    id: number | string;
+    status: string;
+    external_reference?: string;
+    transaction_amount?: number;
+    currency_id?: string;
+    payment_method_id?: string;
+    payment_type_id?: string;
+    metadata?: { user_id?: string; plan_type?: string; order_id?: string };
+  }>(token, `/v1/payments/${encodeURIComponent(paymentId)}`);
+  if (String(payment.id) !== paymentId) throw new ApiError(400, "Mercado Pago payment ID mismatch");
+
+  const externalReference = payment.external_reference ?? "";
+  const order = externalReference
+    ? await db.prepare(
+      `SELECT external_reference, user_id, plan_type, payment_method, amount_cents, status
+       FROM vip_payments WHERE external_reference = ? LIMIT 1`,
+    ).bind(externalReference).first<{
+      external_reference: string;
+      user_id: string;
+      plan_type: VipPlanType;
+      payment_method: "pix" | "card";
+      amount_cents: number;
+      status: string;
+    }>()
+    : null;
+  if (
+    !order ||
+    payment.metadata?.order_id !== order.external_reference ||
+    payment.metadata?.user_id !== order.user_id ||
+    payment.metadata?.plan_type !== order.plan_type ||
+    payment.currency_id !== "BRL" ||
+    payment.transaction_amount !== order.amount_cents / 100 ||
+    (order.payment_method === "pix" && payment.payment_method_id !== "pix") ||
+    (order.payment_method === "card" &&
+      !["credit_card", "debit_card", "prepaid_card"].includes(payment.payment_type_id ?? ""))
+  ) {
+    throw new ApiError(400, "Mercado Pago payment does not match a valid VIP order");
+  }
+
+  const now = new Date().toISOString();
+  if (payment.status !== "approved") {
+    const knownStatuses = new Set(["pending", "rejected", "cancelled", "refunded", "charged_back"]);
+    const status = knownStatuses.has(payment.status) ? payment.status : "pending";
+    await db.prepare(
+      `UPDATE vip_payments SET mp_payment_id = ?, status = ?, updated_at = ?
+       WHERE external_reference = ? AND status NOT IN ('approved', 'processing')`,
+    ).bind(paymentId, status, now, order.external_reference).run();
+    return;
+  }
+
+  const claimToken = crypto.randomUUID();
+  const staleClaimTime = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const claim = await db.prepare(
+    `UPDATE vip_payments
+       SET status = 'processing', mp_payment_id = ?, processing_token = ?, updated_at = ?
+     WHERE external_reference = ?
+       AND (status IN ('created', 'pending') OR (status = 'processing' AND updated_at < ?))
+     RETURNING user_id, plan_type`,
+  ).bind(paymentId, claimToken, now, order.external_reference, staleClaimTime)
+    .first<{ user_id: string; plan_type: VipPlanType }>();
+  if (!claim) return;
+
+  const plan = VIP_PLANS[claim.plan_type];
+  const expiresAt = new Date().toISOString();
+  await db.batch([
+    db.prepare(
+      `UPDATE profiles
+       SET subscription_expires_at = strftime(
+             '%Y-%m-%dT%H:%M:%fZ',
+             MAX(COALESCE(julianday(subscription_expires_at), julianday(?)), julianday(?)) + ${plan.days}
+           ),
+           subscription_status = 'active',
+           vip = 1,
+           updated_at = ?
+       WHERE id = (
+         SELECT user_id FROM vip_payments
+         WHERE external_reference = ? AND processing_token = ? AND status = 'processing'
+       )`,
+    ).bind(expiresAt, expiresAt, now, order.external_reference, claimToken),
+    db.prepare(
+      `UPDATE vip_payments SET status = 'approved', processing_token = NULL,
+         processed_at = ?, updated_at = ?
+       WHERE external_reference = ? AND processing_token = ? AND status = 'processing'`,
+    ).bind(now, now, order.external_reference, claimToken),
+  ]);
+}
+
+async function mercadoPagoWebhookHandler(request: Request, db: D1Database, env: WorkerEnv) {
+  if (request.method !== "POST") throw new ApiError(405, "Method not allowed");
+  const secret = env.MERCADOPAGO_WEBHOOK_SECRET;
+  if (!secret) throw new ApiError(503, "Mercado Pago webhook secret is not configured");
+
+  const url = new URL(request.url);
+  const body = await readJson(request);
+  const data = body["data"] && typeof body["data"] === "object"
+    ? body["data"] as Record<string, unknown>
+    : {};
+  const eventType = typeof body["type"] === "string" ? body["type"] : url.searchParams.get("type");
+  const action = typeof body["action"] === "string" ? body["action"] : url.searchParams.get("action");
+  if (eventType !== "payment" && !(action?.startsWith("payment.") ?? false)) {
+    return json({ received: true, ignored: true });
+  }
+  const paymentId = String(data["id"] ?? url.searchParams.get("data.id") ?? url.searchParams.get("id") ?? "");
+  if (!/^\d+$/.test(paymentId)) throw new ApiError(400, "Invalid Mercado Pago payment ID");
+  if (!(await validMercadoPagoSignature(request, secret, paymentId))) {
+    throw new ApiError(401, "Invalid Mercado Pago webhook signature");
+  }
+  await processMercadoPagoPayment(db, env, paymentId);
+  return json({ received: true });
+}
+
+async function vipStatusHandler(request: Request, db: D1Database, user: AuthUser) {
+  if (request.method !== "GET") throw new ApiError(405, "Method not allowed");
   const profile = await db.prepare(
-    "UPDATE profiles SET vip = 1, updated_at = ? WHERE id = ? RETURNING id, vip",
-  ).bind(new Date().toISOString(), user.id).first<{ id: string; vip: number }>();
+    "SELECT subscription_status, subscription_expires_at FROM profiles WHERE id = ? LIMIT 1",
+  ).bind(user.id).first<{ subscription_status: string; subscription_expires_at: string | null }>();
   if (!profile) throw new ApiError(404, "Profile not found");
-  return json({ data: decodeRow(profile), simulated: true });
+  const active = isVip(profile);
+  if (!active && profile.subscription_status === "active") {
+    await db.prepare(
+      "UPDATE profiles SET subscription_status = 'expired', vip = 0, updated_at = ? WHERE id = ? AND subscription_expires_at <= ?",
+    ).bind(new Date().toISOString(), user.id, new Date().toISOString()).run();
+  }
+  return json({
+    isVip: active,
+    subscriptionStatus: active ? "active" : profile.subscription_expires_at ? "expired" : "free",
+    expiresAt: profile.subscription_expires_at,
+  });
 }
 
 async function chatUnreadHandler(request: Request, db: D1Database, user: AuthUser, path: string) {
@@ -1521,14 +1937,14 @@ async function assertFreeCanContinueConversation(
   userId: string,
 ) {
   const firstMessage = await db.prepare(
-    `SELECT m.sender_id, p.vip
+    `SELECT m.sender_id, p.subscription_expires_at
      FROM messages m
      JOIN profiles p ON p.id = m.sender_id
      WHERE m.conversation_id = ?
      ORDER BY m.created_at ASC, m.rowid ASC
      LIMIT 1`,
-  ).bind(conversationId).first<{ sender_id: string; vip: number }>();
-  if (!firstMessage || firstMessage.sender_id === userId || !firstMessage.vip) {
+  ).bind(conversationId).first<{ sender_id: string; subscription_expires_at: string | null }>();
+  if (!firstMessage || firstMessage.sender_id === userId || !isVip(firstMessage)) {
     throw new ApiError(403, "Wait for a VIP member to start the conversation");
   }
 }
@@ -1541,8 +1957,8 @@ async function chatConversationHandler(request: Request, db: D1Database, user: A
   if (!partnerId || partnerId === user.id) throw new ApiError(400, "Invalid conversation partner");
 
   const [profile, existingConversation] = await Promise.all([
-    db.prepare("SELECT vip FROM profiles WHERE id = ? LIMIT 1")
-      .bind(user.id).first<{ vip: number }>(),
+    db.prepare("SELECT subscription_expires_at FROM profiles WHERE id = ? LIMIT 1")
+      .bind(user.id).first<{ subscription_expires_at: string | null }>(),
     db.prepare(
       "SELECT id, user_a, user_b FROM conversations WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?) LIMIT 1",
     ).bind(user.id, partnerId, partnerId, user.id).first<{ id: string; user_a: string; user_b: string }>(),
@@ -1551,7 +1967,7 @@ async function chatConversationHandler(request: Request, db: D1Database, user: A
   let conversation = existingConversation;
 
   if (!conversation) {
-    if (!profile.vip) throw new ApiError(403, "Only VIP members can start conversations");
+    if (!isVip(profile)) throw new ApiError(403, "Only VIP members can start conversations");
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     try {
@@ -1567,7 +1983,7 @@ async function chatConversationHandler(request: Request, db: D1Database, user: A
     }
   }
 
-  if (!profile.vip) {
+  if (!isVip(profile)) {
     await assertFreeCanContinueConversation(db, conversation.id, user.id);
   }
 
@@ -1630,13 +2046,14 @@ async function chatSendHandler(request: Request, db: D1Database, env: WorkerEnv,
   const [conversation, profile] = await Promise.all([
     db.prepare("SELECT user_a, user_b FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1")
       .bind(conversationId, user.id, user.id).first<{ user_a: string; user_b: string }>(),
-    db.prepare("SELECT vip, private_album FROM profiles WHERE id = ? LIMIT 1").bind(user.id).first<{ vip: number; private_album: string }>(),
+    db.prepare("SELECT subscription_expires_at, private_album FROM profiles WHERE id = ? LIMIT 1")
+      .bind(user.id).first<{ subscription_expires_at: string | null; private_album: string }>(),
   ]);
   if (!conversation || !profile) throw new ApiError(403, "Not a participant in this conversation");
-  if (!profile.vip) await assertFreeCanContinueConversation(db, conversationId, user.id);
+  if (!isVip(profile)) await assertFreeCanContinueConversation(db, conversationId, user.id);
 
   const paths = attachmentPaths as string[];
-  if (paths.length && !profile.vip) throw new ApiError(403, "Only VIP members can send private photo attachments");
+  if (paths.length && !isVip(profile)) throw new ApiError(403, "Only VIP members can send private photo attachments");
   let privateAlbum: unknown;
   try {
     privateAlbum = JSON.parse(profile.private_album ?? "[]") as unknown;
@@ -1788,6 +2205,9 @@ export async function handleWorkerApi(request: Request, rawEnv: unknown) {
     const env = rawEnv as WorkerEnv;
     const db = requireDb(env);
     const path = new URL(request.url).pathname;
+    if (path === "/api/webhooks/mercadopago") {
+      return await mercadoPagoWebhookHandler(request, db, env);
+    }
     if (path.startsWith("/api/auth/")) return await authHandler(request, db, env, path);
     if (path === "/api/support/tickets") return await supportTicketHandler(request, db);
     const user = await getUser(request, db);
@@ -1802,7 +2222,10 @@ export async function handleWorkerApi(request: Request, rawEnv: unknown) {
     if (path === "/api/chat/delete") return await chatDeleteHandler(request, db, user);
     if (path === "/api/chat/send") return await chatSendHandler(request, db, env, user);
     if (path === "/api/email/preferences") return await emailPreferencesHandler(request, db, user);
-    if (path === "/api/vip/activate") return await activatePrototypeVip(request, db, user);
+    if (path === "/api/vip/status") return await vipStatusHandler(request, db, user);
+    if (path === "/api/checkout-pix") return await createVipPaymentOrder(request, db, env, user, "pix");
+    if (path === "/api/checkout-card") return await createVipPaymentOrder(request, db, env, user, "card");
+    if (path === "/api/social/follow-counts") return await socialFollowCountsHandler(request, db);
     if (path === "/api/data") return await dataHandler(request, db, user);
     if (path === "/api/media") return await mediaHandler(request, db, env, user);
     return json({ error: "Not found" }, 404);

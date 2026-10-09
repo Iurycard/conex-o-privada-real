@@ -39,6 +39,54 @@ The Worker cron is configured for `0 9 * * *` (09:00 UTC daily, 06:00 in São Pa
 
 Support replies from `/admin` also use Resend. Configure `RESEND_API_KEY` as an encrypted secret and `EMAIL_FROM` as a verified sender before using the reply action. Ticket creation itself is persisted in D1 and does not require an email client.
 
+## VIP subscriptions with Mercado Pago
+
+The VIP checkout accepts PIX and hosted card checkout for R$ 19,90 (30 days) and R$ 49,90 (90 days). Card details are entered only on Mercado Pago; they are never collected by this app. The Worker verifies signed Mercado Pago webhooks, fetches each payment from the Mercado Pago API, checks its order, plan, currency and value, and only then extends the account's VIP expiration. VIP API permissions are based on the future `subscription_expires_at` timestamp, not the legacy `vip` flag.
+
+### Apply the database migration
+
+For an existing D1 database, apply the VIP migration once before deploying the Worker:
+
+```powershell
+npm run db:migrate:vip
+```
+
+For an existing local development database, apply the local migration once:
+
+```powershell
+npm run db:migrate:vip:local
+```
+
+The migration adds subscription fields to `profiles` and creates `vip_payments` for payment tracking and duplicate-webhook protection. The same schema is included in `schema_d1.sql` for fresh databases. Do not rerun the migration after it succeeds: SQLite `ALTER TABLE ADD COLUMN` is intentionally a one-time operation.
+
+### Configure Mercado Pago and deploy
+
+In Cloudflare, add both values as encrypted Worker secrets (never put them in `wrangler.toml`, source code, or `VITE_*` variables):
+
+```powershell
+npx wrangler secret put MERCADOPAGO_ACCESS_TOKEN
+npx wrangler secret put MERCADOPAGO_WEBHOOK_SECRET
+```
+
+Use the access token for the same Mercado Pago environment (test or production) as the account used to create the payment. Get the webhook signing secret from the Mercado Pago application/webhook settings and enter that exact secret as `MERCADOPAGO_WEBHOOK_SECRET`.
+
+Configure Mercado Pago to send **payment** notifications to:
+
+```text
+https://www.conexaoprivada.site/api/webhooks/mercadopago
+```
+
+Enable the payment events (`payment.created` and `payment.updated`) and ensure webhook signing is enabled. The webhook URL must be publicly reachable over HTTPS. For local tests, copy `.dev.vars.example` to `.dev.vars` and use sandbox credentials and a test webhook secret; `.dev.vars` is ignored by Git.
+
+After the one-time migration and secrets are configured, deploy:
+
+```powershell
+npm run build
+npm run cf:deploy
+```
+
+Test PIX generation and hosted card checkout using Mercado Pago test accounts before enabling production credentials. The checkout is authenticated; the Worker determines the account from its session rather than trusting a client-provided user ID.
+
 ## Existing account and media migration
 
 The repository does not contain an export of the four real profiles or production rows. The four profile inserts in `seed_d1.sql` are explicitly named demo fixtures; replace them with a sanitized export before production. Events are copied from the existing SQL seed in the Supabase migrations. Profile types, genders, and orientations are copied from the frontend option lists.

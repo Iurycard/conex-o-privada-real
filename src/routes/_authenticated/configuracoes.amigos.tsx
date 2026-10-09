@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Heart, UserRound } from "lucide-react";
+import { ArrowLeft, Heart, Lock, UserRound } from "lucide-react";
 import { AvatarOrb, PageHeader, VipBadge } from "@/components/bits";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProfiles } from "@/context/profiles-context";
@@ -76,7 +76,7 @@ function ProfileList({
 function ConnectionsPage() {
   const { profiles, currentId } = useProfiles();
   const social = useSocial();
-  const { tryUseLike } = useVip();
+  const { isVip, openVipModal, tryUseLike } = useVip();
   const toProfiles = (ids: string[]) => ids
     .map((id) => profiles.find((profile) => profile.id === id))
     .filter((profile): profile is (typeof profiles)[number] => Boolean(profile));
@@ -97,34 +97,47 @@ function ConnectionsPage() {
       </Link>
       <PageHeader title="Amigos e seguidores" subtitle="Acompanhe as conexões da sua rede" />
 
-      <Tabs defaultValue="seguidores" className="mt-2">
-        <TabsList className="grid w-full grid-cols-2 bg-surface">
-          <TabsTrigger value="seguidores">Seguidores</TabsTrigger>
-          <TabsTrigger value="seguindo">Seguindo</TabsTrigger>
-        </TabsList>
-        <TabsContent value="seguidores" className="mt-4">
-          {social.ready ? (
-            <ProfileList
-              profiles={followers}
-              following={social.isFollowing}
-              onToggleFollow={(id, nick) => void handleToggleFollow(id, nick)}
-            />
-          ) : (
-            <p className="py-12 text-center text-sm text-muted-foreground">Carregando conexões…</p>
-          )}
-        </TabsContent>
-        <TabsContent value="seguindo" className="mt-4">
-          {social.ready ? (
-            <ProfileList
-              profiles={following}
-              following={() => true}
-              onToggleFollow={(id, nick) => void handleToggleFollow(id, nick)}
-            />
-          ) : (
-            <p className="py-12 text-center text-sm text-muted-foreground">Carregando conexões…</p>
-          )}
-        </TabsContent>
-      </Tabs>
+      {isVip ? (
+        <Tabs defaultValue="seguidores" className="mt-2">
+          <TabsList className="grid w-full grid-cols-2 bg-surface">
+            <TabsTrigger value="seguidores">Seguidores</TabsTrigger>
+            <TabsTrigger value="seguindo">Seguindo</TabsTrigger>
+          </TabsList>
+          <TabsContent value="seguidores" className="mt-4">
+            {social.ready ? (
+              <ProfileList
+                profiles={followers}
+                following={social.isFollowing}
+                onToggleFollow={(id, nick) => void handleToggleFollow(id, nick)}
+              />
+            ) : (
+              <p className="py-12 text-center text-sm text-muted-foreground">Carregando conexões…</p>
+            )}
+          </TabsContent>
+          <TabsContent value="seguindo" className="mt-4">
+            {social.ready ? (
+              <ProfileList
+                profiles={following}
+                following={() => true}
+                onToggleFollow={(id, nick) => void handleToggleFollow(id, nick)}
+              />
+            ) : (
+              <p className="py-12 text-center text-sm text-muted-foreground">Carregando conexões…</p>
+            )}
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <button
+          type="button"
+          onClick={openVipModal}
+          className="mt-4 flex w-full flex-col items-center gap-3 rounded-xl border border-gold/30 bg-surface px-5 py-10 text-center transition-colors hover:border-gold/60"
+        >
+          <Lock className="h-6 w-6 text-gold" />
+          <span className="text-sm font-semibold">Lista de seguidores exclusiva VIP</span>
+          <span className="text-xs text-muted-foreground">Assine o VIP para ver quem segue você e os perfis que acompanha.</span>
+          <span className="rounded-full bg-gradient-gold px-4 py-2 text-xs font-semibold text-gold-foreground">Conhecer o VIP</span>
+        </button>
+      )}
     </div>
   );
 }

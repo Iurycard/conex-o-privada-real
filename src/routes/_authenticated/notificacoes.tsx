@@ -122,6 +122,29 @@ function NotificationsPage() {
                   </button>
                 );
               }
+
+              if (n.type === "follow" && !isVip) {
+                return (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={openVipModal}
+                    className={`flex w-full items-center gap-3 rounded-xl border bg-surface p-3 text-left transition-colors hover:border-gold/50 ${
+                      n.read ? "border-border" : "border-gold/30"
+                    }`}
+                    aria-label="Conhecer o VIP para ver quem começou a seguir você"
+                  >
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gold/10 text-gold">
+                      <Lock className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm">
+                      <span className="block font-medium">Alguém começou a seguir você</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">Seja VIP para ver quem foi · {timeAgo(n.created_at)}</span>
+                    </span>
+                    <Icon className={`h-4 w-4 shrink-0 ${kind.tint}`} />
+                  </button>
+                );
+              }
               
               const body = (
                 <>

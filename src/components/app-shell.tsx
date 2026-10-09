@@ -38,6 +38,7 @@ export function openPostComposer(album: "public" | "private" = "public") {
 
 function PostButton() {
   const { createPost } = useProfiles();
+  const { isVip, openVipModal } = useVip();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -47,12 +48,16 @@ function PostButton() {
   useEffect(() => {
     const handleOpenComposer = (event: Event) => {
       const album = (event as CustomEvent<{ album?: "public" | "private" }>).detail?.album;
+      if (album === "private" && !isVip) {
+        openVipModal();
+        return;
+      }
       if (album) setVisibility(album);
       setOpen(true);
     };
     window.addEventListener("conexao-privada:open-post-composer", handleOpenComposer);
     return () => window.removeEventListener("conexao-privada:open-post-composer", handleOpenComposer);
-  }, []);
+  }, [isVip, openVipModal]);
 
   const resetDraft = () => {
     setText("");
@@ -84,6 +89,10 @@ function PostButton() {
   };
 
   const handlePublish = async () => {
+    if (visibility === "private" && !isVip) {
+      openVipModal();
+      return;
+    }
     const hasContent = text.trim().length > 0 || !!mediaUrl;
     if (!hasContent) {
       toast.error("Adicione texto ou uma mídia antes de publicar");
@@ -195,10 +204,16 @@ function PostButton() {
               </button>
               <button
                 type="button"
-                onClick={() => setVisibility("private")}
+                onClick={() => {
+                  if (!isVip) {
+                    openVipModal();
+                    return;
+                  }
+                  setVisibility("private");
+                }}
                 className={`rounded-full px-3 py-1 text-xs font-medium ${visibility === "private" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
               >
-                Privado
+                {isVip ? "Privado" : "Privado · VIP"}
               </button>
             </div>
           </div>

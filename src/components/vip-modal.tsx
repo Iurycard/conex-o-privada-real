@@ -1,5 +1,5 @@
 import { Crown, Check, QrCode, Copy } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useVip } from "@/context/vip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,37 +13,79 @@ const benefits = [
   "Acesse álbuns privados quando o dono autorizar",
   "Zero anúncios em toda a plataforma",
   "Destaque dourado no feed e no Explorar",
+  "veja quem segue você e quem você segue",
 ];
 
 const plans = [
-  { id: "m", label: "Mensal", price: "R$ 39,90", note: "por mês" },
-  { id: "t", label: "Trimestral", price: "R$ 99,90", note: "R$ 33,30/mês", best: true },
+  { id: "mensal", label: "Mensal", price: "R$ 19,90", note: "30 dias" },
+  { id: "trimestral", label: "Trimestral", price: "R$ 49,90", note: "90 dias", best: true },
 ];
 
 export function VipModal() {
-  const { vipModalOpen, closeVipModal, setVip } = useVip();
-  const [activating, setActivating] = useState(false);
+  const { vipModalOpen, closeVipModal, isVip, refreshVip } = useVip();
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"pix" | "card">("pix");
+  const [planType, setPlanType] = useState<"mensal" | "trimestral">("trimestral");
+  const [qrCode, setQrCode] = useState("");
+  const [qrCodeBase64, setQrCodeBase64] = useState("");
 
-  const handleActivatePrototypeVip = async () => {
-    setActivating(true);
+  useEffect(() => {
+    if (!qrCode || isVip) return;
+    const timer = window.setInterval(() => {
+      void refreshVip().then((active) => {
+        if (active) {
+          setQrCode("");
+          setQrCodeBase64("");
+          closeVipModal();
+          toast.success("Pagamento aprovado. Seu VIP está ativo!");
+        }
+      }).catch(() => {});
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [qrCode, isVip, refreshVip, closeVipModal]);
+
+  const startCheckout = async () => {
+    setCheckoutLoading(true);
     try {
-      const response = await fetch("/api/vip/activate", {
+      const response = await fetch(paymentMethod === "pix" ? "/api/checkout-pix" : "/api/checkout-card", {
         method: "POST",
         credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planType }),
       });
-      const payload = await response.json() as { error?: string; data?: { vip?: boolean }; simulated?: boolean };
-      if (!response.ok || !payload.data?.vip || !payload.simulated) {
-        throw new Error(payload.error ?? "Não foi possível ativar o VIP de teste");
+      const payload = await response.json() as {
+        error?: string;
+        checkoutUrl?: string;
+        qr_code?: string;
+        qr_code_base64?: string;
+      };
+      if (!response.ok) throw new Error(payload.error ?? "Não foi possível iniciar o pagamento");
+      if (paymentMethod === "card") {
+        if (!payload.checkoutUrl) throw new Error("O Mercado Pago não retornou o link do checkout");
+        window.location.assign(payload.checkoutUrl);
+        return;
       }
-      setVip(true);
-      closeVipModal();
-      toast.success("VIP de teste ativado. Nenhum pagamento real foi processado.");
+      if (!payload.qr_code || !payload.qr_code_base64) {
+        throw new Error("O Mercado Pago não retornou o QR Code PIX");
+      }
+      setQrCode(payload.qr_code);
+      setQrCodeBase64(payload.qr_code_base64);
+      toast.success("QR Code PIX gerado. Aguardando confirmação do pagamento.");
     } catch (error) {
-      console.error("Erro ao ativar VIP de teste:", error);
-      toast.error(error instanceof Error ? error.message : "Não foi possível ativar o VIP de teste");
+      console.error("Erro ao iniciar checkout VIP:", error);
+      toast.error(error instanceof Error ? error.message : "Não foi possível iniciar o pagamento");
     } finally {
-      setActivating(false);
+      setCheckoutLoading(false);
+    }
+  };
+
+  const copyPixCode = async () => {
+    try {
+      await navigator.clipboard.writeText(qrCode);
+      toast.success("Código PIX copiado");
+    } catch (error) {
+      console.error("Não foi possível copiar o código PIX:", error);
+      toast.error("Não foi possível copiar automaticamente. Selecione e copie o código PIX.");
     }
   };
 
@@ -75,14 +117,21 @@ export function VipModal() {
 
           <div className="mt-5 grid grid-cols-2 gap-3">
             {plans.map((p) => (
-              <div
+              <button
                 key={p.id}
-                className={`rounded-xl border p-3 ${p.best ? "border-gold/60 bg-gold/5" : "border-border bg-surface-2"}`}
+                type="button"
+                aria-pressed={planType === p.id}
+                onClick={() => {
+                  setPlanType(p.id as "mensal" | "trimestral");
+                  setQrCode("");
+                  setQrCodeBase64("");
+                }}
+                className={`rounded-xl border p-3 text-left ${planType === p.id ? "border-gold/60 bg-gold/5" : "border-border bg-surface-2"}`}
               >
                 <p className="text-xs text-muted-foreground">{p.label}</p>
                 <p className="mt-1 text-lg font-semibold">{p.price}</p>
                 <p className="text-[11px] text-muted-foreground">{p.note}</p>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -111,77 +160,59 @@ export function VipModal() {
 
           {paymentMethod === "pix" ? (
           <div className="mt-5 rounded-xl border border-gold/30 bg-surface-2 p-4">
-            <div className="flex items-center gap-3">
-              <div className="grid h-16 w-16 place-items-center rounded-lg bg-gradient-gold">
-                <QrCode className="h-9 w-9 text-gold-foreground" />
+            {qrCode ? (
+              <div className="space-y-3 text-center">
+                <img
+                  src={`data:image/png;base64,${qrCodeBase64}`}
+                  alt="QR Code para pagamento PIX VIP"
+                  className="mx-auto h-48 w-48 rounded-lg bg-white p-2"
+                />
+                <p className="text-sm font-medium">Escaneie o QR Code ou copie o código PIX</p>
+                <textarea
+                  readOnly
+                  value={qrCode}
+                  aria-label="Código PIX Copia e Cola"
+                  className="min-h-20 w-full resize-y rounded-lg border border-border bg-background p-2 text-xs text-foreground"
+                />
+                <Button type="button" variant="outline" className="w-full" onClick={() => void copyPixCode()}>
+                  <Copy className="mr-2 h-4 w-4" /> Copiar código PIX
+                </Button>
+                <p className="text-xs text-muted-foreground">Aguardando confirmação do Mercado Pago…</p>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium">Pagamento via Pix</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  00020126&#8230;conexaoprivada&#8230;5204000053039865802BR
-                </p>
-                <button
-                  type="button"
-                  onClick={() => toast.success("Código Pix copiado (simulado)")}
-                  className="mt-1 inline-flex items-center gap-1 text-xs text-gold hover:underline"
-                >
-                  <Copy className="h-3 w-3" /> Copiar código
-                </button>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="grid h-16 w-16 place-items-center rounded-lg bg-gradient-gold">
+                  <QrCode className="h-9 w-9 text-gold-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Pagamento via Pix</p>
+                  <p className="text-xs text-muted-foreground">O QR Code será gerado pelo Mercado Pago.</p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
           ) : (
-            <fieldset className="mt-5 space-y-3 rounded-xl border border-gold/30 bg-surface-2 p-4" disabled>
-              <legend className="px-1 text-sm font-medium">Cartão de crédito — demonstração</legend>
-              <label className="block space-y-1 text-xs text-muted-foreground">
-                Número do cartão
-                <input
-                  disabled
-                  placeholder="Disponível após integração de pagamento"
-                  className="w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
-                />
-              </label>
-              <label className="block space-y-1 text-xs text-muted-foreground">
-                Nome impresso no cartão
-                <input
-                  disabled
-                  placeholder="Checkout ainda não conectado"
-                  className="w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block space-y-1 text-xs text-muted-foreground">
-                  Validade
-                  <input
-                    disabled
-                    placeholder="MM/AA"
-                    className="w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
-                  />
-                </label>
-                <label className="block space-y-1 text-xs text-muted-foreground">
-                  CVV
-                  <input
-                    disabled
-                    placeholder="•••"
-                    className="w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
-                  />
-                </label>
-              </div>
+            <div className="mt-5 rounded-xl border border-gold/30 bg-surface-2 p-4">
+              <p className="text-sm font-medium">Pagamento seguro com cartão</p>
               <p className="text-xs text-muted-foreground">
-                Demonstração: não informe dados reais. O cartão não é processado nem armazenado.
+                Você continuará no checkout hospedado do Mercado Pago. Os dados do cartão não passam pelo nosso site.
               </p>
-            </fieldset>
+            </div>
           )}
 
           <Button
             className="mt-5 w-full bg-gradient-gold font-semibold text-gold-foreground hover:opacity-90"
-            onClick={() => void handleActivatePrototypeVip()}
-            disabled={activating}
+            onClick={() => void startCheckout()}
+            disabled={checkoutLoading || Boolean(qrCode) || isVip}
           >
-            {activating ? "Ativando VIP de teste..." : "Já paguei — ativar VIP"}
+            {checkoutLoading
+              ? "Conectando ao Mercado Pago…"
+              : paymentMethod === "pix"
+                ? qrCode ? "Aguardando pagamento PIX…" : "Gerar QR Code PIX"
+                : "Pagar com cartão"}
           </Button>
           <p className="mt-2 text-center text-[11px] text-muted-foreground">
-            Protótipo visual: nenhum pagamento real é processado.
+            O VIP será ativado após a confirmação segura do pagamento.
           </p>
         </div>
       </DialogContent>

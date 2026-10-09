@@ -45,6 +45,7 @@ export async function uploadAlbumPhotos(
   userId: string,
   kind: "public" | "private",
   files: File[],
+  purpose?: "verification",
 ): Promise<string[]> {
   const paths: string[] = [];
   for (const file of files) {
@@ -58,7 +59,10 @@ export async function uploadAlbumPhotos(
       try {
         response = await fetch(`/api/media?key=${encodeURIComponent(key)}`, {
           method: "PUT",
-          headers: { "content-type": contentType },
+          headers: {
+            "content-type": contentType,
+            ...(purpose ? { "x-media-purpose": purpose } : {}),
+          },
           body: preparedFile,
           credentials: "same-origin",
         });

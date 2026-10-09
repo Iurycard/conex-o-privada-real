@@ -258,7 +258,7 @@ function SettingsSection({ title, children }: { title: string; children: React.R
 function SettingsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { openVipModal } = useVip();
+  const { isVip, openVipModal } = useVip();
   const { current, posts, profiles, updatePrivateAlbum } = useProfiles();
   const { user, signOut } = useAuth();
   const social = useSocial();
@@ -278,8 +278,8 @@ function SettingsPage() {
 
   const privateAlbum = current?.private_album ?? [];
   const privateAlbumUrls = useAlbumUrls(privateAlbum);
-  const followerCount = current ? social.followersOf(current.id).length : 0;
-  const followingCount = current ? social.followingOf(current.id).length : 0;
+  const followerCount = current ? social.followerCount(current.id) : 0;
+  const followingCount = current ? social.followingCount(current.id) : 0;
   const visitorProfiles = current
     ? [...new Set(social.visits.filter((visit) => visit.profile_id === current.id).map((visit) => visit.visitor_id))]
         .map((id) => profiles.find((profile) => profile.id === id))
@@ -356,6 +356,12 @@ function SettingsPage() {
   const file = event.target.files?.[0];
   if (!file) return;
 
+  if (!isVip) {
+    openVipModal();
+    event.target.value = "";
+    return;
+  }
+
   if (!user) {
     toast.error("Usuário não autenticado");
     return;
@@ -404,7 +410,7 @@ function SettingsPage() {
     setVerificationSaving(true);
     let evidenceKey: string | undefined;
     try {
-      [evidenceKey] = await uploadAlbumPhotos(user.id, "private", [evidence]);
+      [evidenceKey] = await uploadAlbumPhotos(user.id, "private", [evidence], "verification");
       if (!evidenceKey) throw new Error("Não foi possível enviar a foto");
       const response = await fetch("/api/verification/request", {
         method: "POST",
@@ -702,10 +708,20 @@ function SettingsPage() {
               <section key={album} aria-labelledby={`${album}-album-title`}>
                 <div className="mb-2 flex items-center justify-between">
                   <h3 id={`${album}-album-title`} className="text-sm font-semibold">{title}</h3>
-                  <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary-glow">
-                    <Plus className="h-3.5 w-3.5" /> Adicionar foto
-                    <input type="file" accept="image/*" className="sr-only" onChange={addPhoto} />
-                  </label>
+                  {isVip ? (
+                    <label className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary-glow">
+                      <Plus className="h-3.5 w-3.5" /> Adicionar foto
+                      <input type="file" accept="image/*" className="sr-only" onChange={addPhoto} />
+                    </label>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openVipModal}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-gold"
+                    >
+                      <Lock className="h-3.5 w-3.5" /> Seja VIP para adicionar fotos
+                    </button>
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                   {photos.map((photo, index) => (

@@ -401,8 +401,8 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
             <p className="text-[11px] text-muted-foreground">visualizações</p>
           </div>
           {([
-            [nf(followingIds.length), "seguindo", "following"],
-            [nf(followersIds.length), "seguidores", "followers"],
+            [nf(social.followingCount(profile.id)), "seguindo", "following"],
+            [nf(social.followerCount(profile.id)), "seguidores", "followers"],
           ] as const).map(([value, label, view]) => (
 
             <button

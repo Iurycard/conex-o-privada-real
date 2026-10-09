@@ -9,6 +9,7 @@ import {
 } from "react";
 import { d1 } from "@/lib/d1-client"
 import { useAuth } from "@/hooks/use-auth";
+import { useVip } from "@/context/vip";
 
 export type FollowRow = { follower_id: string; following_id: string };
 export type LikeRow = { liker_id: string; liked_id: string };
@@ -37,6 +38,7 @@ type SocialContextValue = {
   visits: VisitRow[];
   notifications: NotificationRow[];
   albumRequests: AlbumRequestRow[];
+  followCounts: Record<string, { followers: number; following: number }>;
   isFollowing: (id: string) => boolean;
   followerCount: (id: string) => number;
   followingCount: (id: string) => number;
@@ -59,6 +61,7 @@ const SocialContext = createContext<SocialContextValue | null>(null);
 
 export function SocialProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { isVip } = useVip();
   const uid = user?.id ?? null;
   const [ready, setReady] = useState(false);
   const [follows, setFollows] = useState<FollowRow[]>([]);
@@ -66,6 +69,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   const [visits, setVisits] = useState<VisitRow[]>([]);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [albumRequests, setAlbumRequests] = useState<AlbumRequestRow[]>([]);
+  const [followCounts, setFollowCounts] = useState<Record<string, { followers: number; following: number }>>({});
 
   const refresh = useCallback(async () => {
     if (!uid) {
@@ -74,23 +78,34 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       setVisits([]);
       setNotifications([]);
       setAlbumRequests([]);
+      setFollowCounts({});
       setReady(false);
       return;
     }
-    const [f, l, v, n, r] = await Promise.all([
+    const [f, l, v, n, r, countsResponse] = await Promise.all([
       d1.from("follows").select("follower_id, following_id"),
       d1.from("profile_likes").select("liker_id, liked_id"),
       d1.from("profile_visits").select("visitor_id, profile_id, visited_at").order("visited_at", { ascending: false }),
       d1.from("notifications").select("*").order("created_at", { ascending: false }).limit(50),
       d1.from("album_access_requests").select("*").order("created_at", { ascending: false }),
+      fetch("/api/social/follow-counts", { credentials: "same-origin" }),
     ]);
+    const countsPayload = await countsResponse.json() as {
+      counts?: { profile_id: string; followers: number; following: number }[];
+      error?: string;
+    };
+    if (!countsResponse.ok) throw new Error(countsPayload.error ?? "Não foi possível carregar os totais de seguidores");
     setFollows((f.data ?? []) as FollowRow[]);
     setLikes((l.data ?? []) as LikeRow[]);
     setVisits((v.data ?? []) as VisitRow[]);
     setNotifications((n.data ?? []) as NotificationRow[]);
     setAlbumRequests((r.data ?? []) as AlbumRequestRow[]);
+    setFollowCounts(Object.fromEntries((countsPayload.counts ?? []).map((row) => [
+      row.profile_id,
+      { followers: row.followers, following: row.following },
+    ])));
     setReady(true);
-  }, [uid]);
+  }, [uid, isVip]);
 
   useEffect(() => {
     void refresh();
@@ -122,19 +137,30 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       visits,
       notifications,
       albumRequests,
+      followCounts,
       isFollowing,
-      followerCount: (id) => follows.filter((f) => f.following_id === id).length,
-      followingCount: (id) => follows.filter((f) => f.follower_id === id).length,
+      followerCount: (id) => followCounts[id]?.followers ?? 0,
+      followingCount: (id) => followCounts[id]?.following ?? 0,
       followersOf: (id) => follows.filter((f) => f.following_id === id).map((f) => f.follower_id),
       followingOf: (id) => follows.filter((f) => f.follower_id === id).map((f) => f.following_id),
       toggleFollow: async (id, nick) => {
         if (!uid || id === uid) return;
         if (isFollowing(id)) {
           setFollows((list) => list.filter((f) => !(f.follower_id === uid && f.following_id === id)));
+          setFollowCounts((counts) => ({
+            ...counts,
+            [id]: { ...counts[id], followers: Math.max(0, (counts[id]?.followers ?? 0) - 1) },
+            [uid]: { ...counts[uid], following: Math.max(0, (counts[uid]?.following ?? 0) - 1) },
+          }));
           await d1.from("follows").delete().eq("follower_id", uid).eq("following_id", id);
           return;
         }
         setFollows((list) => [...list, { follower_id: uid, following_id: id }]);
+        setFollowCounts((counts) => ({
+          ...counts,
+          [id]: { ...counts[id], followers: (counts[id]?.followers ?? 0) + 1 },
+          [uid]: { ...counts[uid], following: (counts[uid]?.following ?? 0) + 1 },
+        }));
         await d1.from("follows").insert({ follower_id: uid, following_id: id });
         await notify(id, "follow", `começou a seguir você`);
         void nick;
@@ -201,7 +227,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
       },
       refresh,
     };
-  }, [ready, follows, likes, visits, notifications, albumRequests, uid, notify, refresh]);
+  }, [ready, follows, likes, visits, notifications, albumRequests, followCounts, uid, notify, refresh]);
 
   return <SocialContext.Provider value={value}>{children}</SocialContext.Provider>;
 }

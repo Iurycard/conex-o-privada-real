@@ -12,6 +12,8 @@
     "db:seed": "wrangler d1 execute coexaoprivada --remote --file=seed_d1.sql",
     "db:init:local": "wrangler d1 execute coexaoprivada --local --persist-to .wrangler/state --file=schema_d1.sql",
     "db:seed:local": "wrangler d1 execute coexaoprivada --local --persist-to .wrangler/state --file=seed_d1.sql",
+    "db:migrate:vip": "wrangler d1 execute coexaoprivada --remote --file=migrations/20261009_vip_mercadopago.sql",
+    "db:migrate:vip:local": "wrangler d1 execute coexaoprivada --local --persist-to .wrangler/state --file=migrations/20261009_vip_mercadopago.sql",
     "cf:dev": "wrangler dev --config .output/server/wrangler.json --persist-to .wrangler/state --port 8080",
     "cf:deploy": "wrangler deploy --config .output/server/wrangler.json",
     "lint": "eslint .",
