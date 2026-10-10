@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/context/profiles-context";
 import { useVip } from "@/context/vip";
@@ -269,6 +270,9 @@ function SettingsPage() {
   const [dailyActivityEmails, setDailyActivityEmails] = useState(true);
   const [emailPreferenceLoading, setEmailPreferenceLoading] = useState(true);
   const [emailPreferenceSaving, setEmailPreferenceSaving] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [verification, setVerification] = useState<{
     verified: boolean;
     request: { id: string; status: string; created_at: string; review_note?: string | null } | null;
@@ -348,6 +352,37 @@ function SettingsPage() {
   const handleSignOut = async () => {
     await signOut();
     navigate({ to: "/", replace: true });
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteAccountPassword || deletingAccount) return;
+    setDeletingAccount(true);
+    try {
+      const response = await fetch("/api/auth/delete-account", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: deleteAccountPassword }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Não foi possível excluir sua conta");
+
+      setDeleteAccountOpen(false);
+      setDeleteAccountPassword("");
+      toast.success("Sua conta e os dados associados foram excluídos");
+      try {
+        await signOut();
+      } catch (error) {
+        console.error("A conta foi excluída, mas não foi possível atualizar a sessão local:", error);
+        window.dispatchEvent(new Event("cp:auth-changed"));
+      }
+      navigate({ to: "/", replace: true });
+    } catch (error) {
+      console.error("Erro ao excluir conta:", error);
+      toast.error(error instanceof Error ? error.message : "Não foi possível excluir sua conta");
+    } finally {
+      setDeletingAccount(false);
+    }
   };
   
   const albumCount = privateAlbum.length;
@@ -655,7 +690,13 @@ function SettingsPage() {
               <SettingsRow label="Sair" destructive onClick={() => void handleSignOut()} />
             </div>
 
-            <AlertDialog>
+            <AlertDialog
+              open={deleteAccountOpen}
+              onOpenChange={(open) => {
+                setDeleteAccountOpen(open);
+                if (!open) setDeleteAccountPassword("");
+              }}
+            >
               <AlertDialogTrigger asChild>
                 <Button
                   type="button"
@@ -675,16 +716,33 @@ function SettingsPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Excluir sua conta?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Esta ação removeria permanentemente seus dados. Neste protótipo, nenhuma informação será apagada.
+                    Esta ação excluirá permanentemente seu perfil, suas publicações, conversas, fotos e demais dados associados. Não será possível desfazê-la.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
+                <div className="space-y-2">
+                  <label htmlFor="delete-account-password" className="text-sm font-medium">
+                    Confirme sua senha atual
+                  </label>
+                  <Input
+                    id="delete-account-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={deleteAccountPassword}
+                    onChange={(event) => setDeleteAccountPassword(event.target.value)}
+                    disabled={deletingAccount}
+                  />
+                </div>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={() => toast("Exclusão simulada — nenhum dado foi removido")}
+                    disabled={!deleteAccountPassword || deletingAccount}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void handleDeleteAccount();
+                    }}
                   >
-                    Confirmar exclusão
+                    {deletingAccount ? "Excluindo..." : "Excluir permanentemente"}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

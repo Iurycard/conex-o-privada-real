@@ -144,15 +144,29 @@ function ChatPage() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<{ id: string; partnerId: string; nick: string } | null>(null);
   const [deletingConversation, setDeletingConversation] = useState(false);
-  const { isVip, openVipModal } = useVip();
+  const { isVip, refreshVip, openVipModal } = useVip();
   const { user } = useAuth();
   const { unreadByConversation, refreshUnreadMessages } = useUnreadMessages();
 
   const openPrivatePhotoPicker = async () => {
     if (!user) return;
+    let hasVip: boolean;
+    try {
+      hasVip = await refreshVip();
+    } catch (error) {
+      console.error("Erro ao verificar assinatura VIP para o chat:", error);
+      toast.error("Não foi possível verificar sua assinatura VIP");
+      return;
+    }
+    if (!hasVip) {
+      setCanSendPrivatePhotos(false);
+      openVipModal();
+      return;
+    }
+
     const { data: profile, error } = await d1
       .from("profiles")
-      .select("vip, private_album")
+      .select("private_album")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -162,12 +176,8 @@ function ChatPage() {
       return;
     }
 
-    const profileRow = profile as { vip?: boolean; private_album?: string[] };
-    setCanSendPrivatePhotos(Boolean(profileRow.vip));
-    if (!profileRow.vip) {
-      openVipModal();
-      return;
-    }
+    const profileRow = profile as { private_album?: string[] };
+    setCanSendPrivatePhotos(true);
 
     const photos = (profileRow.private_album ?? []).filter((path) => path.startsWith(`${user.id}/private/`));
     setPrivatePhotoPaths(photos);
@@ -632,6 +642,11 @@ function ChatPage() {
                   )}
 
                   <div className="border-t border-border/70 bg-surface/40 p-3 sm:p-4">
+                    {selectedPrivatePhotos.length > 0 && (
+                      <p className="mb-2 text-xs text-muted-foreground" role="status">
+                        {selectedPrivatePhotos.length} foto{selectedPrivatePhotos.length === 1 ? "" : "s"} privada{selectedPrivatePhotos.length === 1 ? "" : "s"} anexada{selectedPrivatePhotos.length === 1 ? "" : "s"} à mensagem
+                      </p>
+                    )}
                     <div className="flex items-center gap-2">
                       <button
                         type="button"

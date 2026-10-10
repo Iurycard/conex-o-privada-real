@@ -95,6 +95,8 @@ Supabase Auth password hashes cannot be exported for reuse. Existing users must 
 
 Passwords use PBKDF2-SHA-256 with 100,000 iterations to stay within the Cloudflare Workers Web Crypto limit. Users can change their password while signed in after confirming the current password, or request an email reset link from the login screen. Reset links are single-use and expire after one hour; completing a reset invalidates all existing sessions. Accounts whose password hashes were created with more than 100,000 iterations must use the password-reset flow once; Cloudflare Workers cannot verify those older hashes.
 
+Users can permanently delete their account from **Configurações > Excluir conta** after re-entering their current password. The Worker removes their profile, authentication identity, related D1 records, and owned R2 photos; this cannot be undone.
+
 ## First administrator
 
 After registering the first account, obtain its ID from `auth_users`, then grant admin access in D1:

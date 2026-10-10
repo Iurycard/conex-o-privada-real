@@ -8,12 +8,10 @@ import {
   Heart,
   Home,
   Lock,
-  MapPin,
   MessageSquare,
   MoreHorizontal,
   MoreVertical,
   PenSquare,
-  Signpost,
   UserRound,
   Ban,
   ChevronLeft,
@@ -63,35 +61,11 @@ function ageFrom(birthDate: string | null) {
   return age >= 0 ? age : null;
 }
 
-function distanceBetweenProfiles(profile: Profile, viewer: Profile | null) {
-  if (profile.city && viewer?.city && profile.city.trim().toLowerCase() === viewer.city.trim().toLowerCase()) {
-    return "0 km";
-  }
-
-  if (
-    typeof profile.latitude !== "number" || typeof profile.longitude !== "number"
-    || typeof viewer?.latitude !== "number" || typeof viewer.longitude !== "number"
-  ) {
-    return "Distância indisponível";
-  }
-
-  const earthRadiusKm = 6371;
-  const toRadians = (value: number) => (value * Math.PI) / 180;
-  const latitudeDelta = toRadians(viewer.latitude - profile.latitude);
-  const longitudeDelta = toRadians(viewer.longitude - profile.longitude);
-  const latitudeOne = toRadians(profile.latitude);
-  const latitudeTwo = toRadians(viewer.latitude);
-  const a = Math.sin(latitudeDelta / 2) ** 2
-    + Math.cos(latitudeOne) * Math.cos(latitudeTwo) * Math.sin(longitudeDelta / 2) ** 2;
-  const distance = earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return `${Math.round(distance)} km`;
-}
-
 function memberSince(createdAt: string | null) {
   if (!createdAt) return "Data indisponível";
   const date = new Date(createdAt);
   if (Number.isNaN(date.getTime())) return "Data indisponível";
-  return `Desde ${date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`;
+  return `Usuário desde ${date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`;
 }
 
 export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: boolean }) {
@@ -272,10 +246,9 @@ export function ProfileView({ profile, isOwner }: { profile: Profile; isOwner: b
     setLoadingPostComments(false);
   }
 
-  const info: Array<[typeof MapPin, string]> = [
+  const info: Array<[typeof Home, string]> = [
     [Home, profile.city || "Cidade não informada"],
     [Cake, ageFrom(profile.birth_date) === null ? "Idade não informada" : `${ageFrom(profile.birth_date)} anos`],
-    [Signpost, distanceBetweenProfiles(profile, current)],
     [CalendarDays, memberSince(profile.created_at)],
   ];
 

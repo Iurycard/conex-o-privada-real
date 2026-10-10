@@ -210,6 +210,87 @@ async function authHandler(request: Request, db: D1Database, env: WorkerEnv, pat
     return json({ user: user ? { id: user.id, email: user.email, app_metadata: { role: user.role } } : null });
   }
 
+  if (path === "/api/auth/delete-account" && request.method === "POST") {
+    assertSameOrigin(request);
+    const user = await getUser(request, db);
+    if (!user) throw new ApiError(401, "Authentication required");
+    const body = await readJson(request);
+    const password = typeof body["password"] === "string" ? body["password"] : "";
+    const account = await db.prepare("SELECT password_hash FROM auth_users WHERE id = ? LIMIT 1")
+      .bind(user.id).first<{ password_hash: string }>();
+    if (!account || !(await verifyPassword(password, account.password_hash))) {
+      throw new ApiError(401, "A senha atual está incorreta");
+    }
+
+    const profile = await db.prepare(
+      "SELECT avatar, cover, public_album, private_album FROM profiles WHERE id = ? LIMIT 1",
+    ).bind(user.id).first<{
+      avatar: string | null;
+      cover: string | null;
+      public_album: string;
+      private_album: string;
+    }>();
+    if (!profile) throw new ApiError(404, "Profile not found");
+
+    const mediaKeys = new Set<string>();
+    const addMediaKey = (value: unknown) => {
+      if (typeof value === "string" && validMediaKey(value) && value.startsWith(`${user.id}/`)) {
+        mediaKeys.add(value);
+      }
+    };
+    addMediaKey(profile.avatar);
+    addMediaKey(profile.cover);
+    for (const key of [
+      ...parseAlbum(profile.public_album, "public album"),
+      ...parseAlbum(profile.private_album, "private album"),
+    ]) {
+      addMediaKey(key);
+    }
+
+    const posts = await db.prepare("SELECT media, image FROM posts WHERE author_id = ?")
+      .bind(user.id).all<{ media: string | null; image: string | null }>();
+    for (const post of posts.results ?? []) {
+      for (const value of [post.media, post.image]) {
+        if (!value) continue;
+        try {
+          const parsed: unknown = JSON.parse(value);
+          if (Array.isArray(parsed)) parsed.forEach(addMediaKey);
+          else addMediaKey(parsed);
+        } catch {
+          addMediaKey(value);
+        }
+      }
+    }
+
+    const evidence = await db.prepare(
+      "SELECT evidence_key FROM verification_requests WHERE user_id = ?",
+    ).bind(user.id).all<{ evidence_key: string }>();
+    for (const row of evidence.results ?? []) addMediaKey(row.evidence_key);
+    const messageMedia = await db.prepare(
+      `SELECT a.storage_path FROM message_attachments a
+       JOIN messages m ON m.id = a.message_id
+       WHERE m.sender_id = ?`,
+    ).bind(user.id).all<{ storage_path: string }>();
+    for (const row of messageMedia.results ?? []) addMediaKey(row.storage_path);
+
+    if (mediaKeys.size) {
+      if (!env.MEDIA) throw new ApiError(503, "R2 binding MEDIA is not configured");
+      try {
+        await Promise.all([...mediaKeys].map((key) => env.MEDIA!.delete(key)));
+      } catch (error) {
+        console.error(`Could not remove R2 media for account ${user.id}:`, error);
+        throw new ApiError(502, "Não foi possível remover todas as fotos. Tente novamente.");
+      }
+    }
+
+    await db.batch([
+      db.prepare("DELETE FROM support_tickets WHERE user_id = ?").bind(user.id),
+      db.prepare("DELETE FROM profiles WHERE id = ?").bind(user.id),
+      db.prepare("DELETE FROM auth_users WHERE id = ?").bind(user.id),
+    ]);
+    return json({ ok: true }, 200, { "set-cookie": sessionCookie(request, "", 0) });
+  }
+
   if (path === "/api/auth/logout" && request.method === "POST") {
     assertSameOrigin(request);
     const token = getCookie(request, SESSION_COOKIE);
@@ -1938,16 +2019,15 @@ async function assertFreeCanContinueConversation(
   conversationId: string,
   userId: string,
 ) {
+  // A later VIP expiration must not revoke a conversation the other user already started.
   const firstMessage = await db.prepare(
-    `SELECT m.sender_id, p.subscription_expires_at
-     FROM messages m
-     JOIN profiles p ON p.id = m.sender_id
-     WHERE m.conversation_id = ?
-     ORDER BY m.created_at ASC, m.rowid ASC
+    `SELECT sender_id FROM messages
+     WHERE conversation_id = ?
+     ORDER BY created_at ASC, rowid ASC
      LIMIT 1`,
-  ).bind(conversationId).first<{ sender_id: string; subscription_expires_at: string | null }>();
-  if (!firstMessage || firstMessage.sender_id === userId || !isVip(firstMessage)) {
-    throw new ApiError(403, "Wait for a VIP member to start the conversation");
+  ).bind(conversationId).first<{ sender_id: string }>();
+  if (!firstMessage || firstMessage.sender_id === userId) {
+    throw new ApiError(403, "Aguarde uma mensagem do outro usuário para continuar esta conversa");
   }
 }
 

@@ -9,6 +9,7 @@ export type ProfileRow = {
   gender: string | null;
   orientation?: string | null;
   birth_date: string | null;
+  created_at: string;
   hue: number;
   avatar: string | null;
   cover: string | null;
@@ -47,7 +48,9 @@ export function rowToProfile(row: ProfileRow) {
     bio: row.bio || "Perfil recém-criado.",
     ...(row.gender ? { gender: row.gender } : {}),
     ...(row.orientation ? { orientation: row.orientation } : {}),
+    birth_date: row.birth_date,
     ...(row.birth_date ? { birthDate: row.birth_date } : {}),
+    created_at: row.created_at,
     ...(typeof row.latitude === "number" ? { latitude: row.latitude } : {}),
     ...(typeof row.longitude === "number" ? { longitude: row.longitude } : {}),
     avatar: mediaUrl(row.avatar),
